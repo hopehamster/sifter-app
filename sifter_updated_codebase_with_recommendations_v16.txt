@@ -1,0 +1,1735 @@
+# File: lib/widgets/create_room_sheet.dart
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'dart:math';
+import '../providers/chat_provider.dart';
+import '../services/location_service.dart';
+import '../strings.dart';
+import '../utils/quad_tree.dart';
+
+class CreateRoomSheet extends StatefulWidget {
+  const CreateRoomSheet({super.key});
+
+  @override
+  State<CreateRoomSheet> createState() => _CreateRoomSheetState();
+}
+
+class _CreateRoomSheetState extends State<CreateRoomSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  double _radius = 100;
+  bool _isPermanent = false;
+  bool _isLoading = false;
+  bool _isWithinGeofence = true;
+  QuadTree? _roomQuadTree;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeQuadTree();
+  }
+
+  Future<void> _initializeQuadTree() async {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final rooms = await chatProvider.fetchNearbyRooms();
+    _roomQuadTree = QuadTree(
+      x: -180,
+      y: -90,
+      width: 360,
+      height: 180,
+      capacity: 4,
+    );
+    for (var room in rooms) {
+      _roomQuadTree!.insert(Point(room.latitude, room.longitude, room));
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createRoom() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final position = chatProvider.currentPosition ?? chatProvider.lastKnownPosition;
+
+    if (position == null || position.timestamp.difference(DateTime.now()).inMinutes > 5) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(Strings.locationError)),
+      );
+      return;
+    }
+
+    if (_radius < 50 || _radius > 1000) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(Strings.invalidRadiusError)),
+      );
+      return;
+    }
+
+    try {
+      final roomName = _nameController.text.trim();
+      if (await chatProvider.roomNameExists(roomName)) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(Strings.roomNameExistsError)),
+        );
+        return;
+      }
+
+      // Check for overlapping rooms
+      final nearbyRooms = _roomQuadTree?.queryRange(position.latitude, position.longitude, _radius) ?? [];
+      if (nearbyRooms.isNotEmpty) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Room overlaps with existing rooms')),
+        );
+        return;
+      }
+
+      await chatProvider.createRoomWithRetry(
+        name: roomName,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        radiusInMeters: _radius,
+        isPermanent: _isPermanent,
+      );
+
+      if (mounted) {
+        final distance = _calculateDistance(
+          position.latitude,
+          position.longitude,
+          position.latitude,
+          position.longitude,
+        );
+        setState(() => _isWithinGeofence = distance <= _radius);
+        if (!_isWithinGeofence) {
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Geofence Warning'),
+              content: const Text('You are outside the geofence of the room you created.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          chatProvider.logGeofenceEvent('boundary_exit', position.latitude, position.longitude, _radius, metadata: {
+            'roomName': roomName,
+            'timestamp': DateTime.now().toIso8601String(),
+            'sessionId': chatProvider.sessionId ?? 'unknown',
+          });
+        } else {
+          chatProvider.logGeofenceEvent('boundary_entry', position.latitude, position.longitude, _radius, metadata: {
+            'roomName': roomName,
+            'timestamp': DateTime.now().toIso8601String(),
+            'sessionId': chatProvider.sessionId ?? 'unknown',
+          });
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(Strings.roomCreatedSuccess)),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(Strings.createRoomError)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const earthRadius = 6371000; // meters
+    final dLat = (lat2 - lat1) * pi / 180;
+    final dLon = (lon2 - lon1) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Create Chat Room',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Room Name',
+                border: OutlineInputBorder(),
+                errorMaxLines: 2,
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return Strings.roomNameEmptyError;
+                }
+                if (value.length < 3) {
+                  return Strings.roomNameTooShortError;
+                }
+                return null;
+              },
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text('Radius:'),
+                Expanded(
+                  child: Semantics(
+                    label: 'Radius slider, ${_radius.round()} meters',
+                    child: Slider(
+                      value: _radius,
+                      min: 50,
+                      max: 1000,
+                      divisions: 19,
+                      label: '${_radius.round()}m',
+                      onChanged: (value) {
+                        HapticFeedback.lightImpact();
+                        setState(() {
+                          _radius = value;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                Text('${_radius.round()}m'),
+              ],
+            ),
+            SwitchListTile(
+              title: const Text('Permanent Room'),
+              subtitle: const Text('Room will not expire'),
+              value: _isPermanent,
+              onChanged: (value) {
+                setState(() {
+                  _isPermanent = value;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _isLoading ? null : _createRoom,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: _isLoading
+                  ? const CircularProgressIndicator()
+                  : const Text('Create Room'),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+# File: lib/widgets/chat_input.dart
+import 'package:flutter/material.dart';
+import 'dart:async';
+import '../services/push_notification_service.dart';
+import 'package:provider/provider.dart';
+
+class ChatInput extends StatefulWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onSubmitted;
+  final ValueChanged<String> onChanged;
+  final bool isComposing;
+
+  const ChatInput({
+    super.key,
+    required this.controller,
+    required this.onSubmitted,
+    required this.onChanged,
+    required this.isComposing,
+  });
+
+  @override
+  State<ChatInput> createState() => _ChatInputState();
+}
+
+class _ChatInputState extends State<ChatInput> {
+  Timer? _debounce;
+  Timer? _retryTimer;
+  final List<String> _offlineQueue = [];
+  bool _isOnline = true;
+  final ValueNotifier<int> _charCount = ValueNotifier(0);
+  static const int _maxChars = 500;
+  static const int _initialRetryDelaySeconds = 10;
+  static const int _maxRetryDelaySeconds = 60;
+
+  @override
+  void initState() {
+    super.initState();
+    int retryDelay = _initialRetryDelaySeconds;
+    _retryTimer = Timer.periodic(Duration(seconds: retryDelay), (timer) async {
+      if (_isOnline && _offlineQueue.isNotEmpty) {
+        final messagesToSend = _offlineQueue.toList();
+        _offlineQueue.clear();
+        final pushService = Provider.of<PushNotificationService>(context, listen: false);
+        for (var message in messagesToSend) {
+          try {
+            widget.onSubmitted(message);
+            await pushService.sendNotification(
+              'Message Sent',
+              'Your queued message has been sent.',
+            );
+            retryDelay = _initialRetryDelaySeconds;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Message sent successfully')),
+            );
+          } catch (e) {
+            _offlineQueue.insert(0, message);
+            retryDelay = (retryDelay * 2).clamp(_initialRetryDelaySeconds, _maxRetryDelaySeconds);
+            timer.cancel();
+            _retryTimer = Timer.periodic(Duration(seconds: retryDelay), timer.callback);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to send message: $e')),
+            );
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _retryTimer?.cancel();
+    _offlineQueue.clear();
+    _charCount.dispose();
+    super.dispose();
+  }
+
+  String _sanitizeInput(String input) {
+    return input.replaceAll(RegExp(r'<[^>]+>'), '');
+  }
+
+  void _debouncedOnChanged(String value) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      final sanitizedValue = _sanitizeInput(value);
+      _charCount.value = sanitizedValue.length;
+      widget.onChanged(sanitizedValue);
+    });
+  }
+
+  void _submitMessage(String value) {
+    final sanitizedValue = _sanitizeInput(value);
+    if (!_isOnline) {
+      _offlineQueue.add(sanitizedValue);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message queued. Will send when online.')),
+      );
+      return;
+    }
+    widget.onSubmitted(sanitizedValue);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).dividerColor,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8.0,
+            vertical: 4.0,
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    onPressed: () {},
+                    iconSize: 48,
+                    padding: const EdgeInsets.all(12),
+                    tooltip: 'Upload Image',
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: widget.controller,
+                      onChanged: _debouncedOnChanged,
+                      onSubmitted: _submitMessage,
+                      decoration: InputDecoration(
+                        hintText: 'Type a message',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                      ),
+                      textCapitalization: TextCapitalization.sentences,
+                      keyboardType: TextInputType.multiline,
+                      maxLines: null,
+                      maxLength: _maxChars,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: ValueNotifier(widget.isComposing),
+                    builder: (context, value, child) {
+                      return TweenAnimationBuilder<double>(
+                        duration: const Duration(milliseconds: 200),
+                        tween: Tween(begin: value ? 0.0 : 1.0, end: value ? 1.0 : 0.0),
+                        builder: (context, opacity, child) {
+                          return Opacity(
+                            opacity: opacity,
+                            child: SizedBox(
+                              width: value ? 48 : 0,
+                              child: value
+                                  ? IconButton(
+                                      icon: Icon(
+                                        Icons.send,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                      onPressed: () => _submitMessage(widget.controller.text),
+                                      tooltip: 'Send Message',
+                                    )
+                                  : null,
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+              ValueListenableBuilder<int>(
+                valueListenable: _charCount,
+                builder: (context, count, child) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text(
+                      '$count/$_maxChars characters',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: count > _maxChars * 0.9
+                                ? Theme.of(context).colorScheme.error
+                                : Theme.of(context).textTheme.bodySmall?.color,
+                          ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+# File: lib/widgets/message_bubble.dart
+import 'package:flutter/material.dart';
+import '../models/message.dart';
+import '../utils.dart';
+
+class MessageBubble extends StatelessWidget {
+  final Message message;
+  final bool showAvatar;
+
+  const MessageBubble({
+    super.key,
+    required this.message,
+    this.showAvatar = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isMe = message.isMine;
+    final displayName = message.displayName ?? 'Anonymous';
+    final avatarKey = ValueKey(displayName);
+    final textStyle = const TextStyle(
+      color: Colors.white,
+      fontSize: 16,
+    );
+    final timestampStyle = theme.textTheme.bodySmall?.copyWith(
+      fontSize: 10,
+      color: isMe
+          ? Colors.white.withOpacity(0.9)
+          : theme.textTheme.bodySmall?.color?.withOpacity(0.7),
+    );
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: isMe ? 64.0 : showAvatar ? 0.0 : 48.0,
+        right: isMe ? 0.0 : 64.0,
+      ),
+      child: Row(
+        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!isMe && showAvatar) ...[
+            CircleAvatar(
+              key: avatarKey,
+              radius: 16,
+              backgroundColor: theme.colorScheme.primary,
+              child: Text(
+                displayName[0].toUpperCase(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                if (showAvatar && !message.isAnonymous)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 4,
+                      right: 4,
+                      bottom: 4,
+                    ),
+                    child: Text(
+                      displayName,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.textTheme.bodySmall?.color?.withOpacity(0.7),
+                      ),
+                    ),
+                  ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: isMe
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.surfaceVariant,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isMe ? 16 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 16),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.7,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.text,
+                        style: isMe ? textStyle : textStyle.copyWith(color: null),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        formatTime(message.timestamp),
+                        style: timestampStyle,
+                        semanticsLabel: 'Message sent at ${formatTime(message.timestamp)}',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+# File: lib/widgets/room_info_dialog.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/chat_room.dart';
+import '../providers/chat_provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/notification_service.dart';
+import '../theme_config.dart';
+import '../strings.dart';
+import 'paged_participant_list.dart';
+
+class RoomInfoDialog extends StatefulWidget {
+  final ChatRoom room;
+
+  const RoomInfoDialog({
+    super.key,
+    required this.room,
+  });
+
+  @override
+  State<RoomInfoDialog> createState() => _RoomInfoDialogState();
+}
+
+class _RoomInfoDialogState extends State<RoomInfoDialog> with TickerProviderStateMixin {
+  bool _isDeleting = false;
+  double _opacity = 1.0;
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: _opacity,
+      duration: const Duration(milliseconds: 200),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Dialog(
+          child: Padding(
+            padding: ThemeConfig.defaultPadding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.room.name,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                      tooltip: 'Close',
+                    ),
+                  ],
+                ),
+                const Divider(),
+                _buildInfoRow(
+                  context,
+                  'Type',
+                  widget.room.isPermanent ? 'Permanent' : 'Temporary',
+                  Icons.timer,
+                ),
+                _buildInfoRow(
+                  context,
+                  'Radius',
+                  '${widget.room.radiusInMeters.round()}m',
+                  Icons.radio_button_unchecked,
+                ),
+                _buildInfoRow(
+                  context,
+                  'Participants',
+                  '${widget.room.participantIds.length}',
+                  Icons.group,
+                ),
+                if (!widget.room.isPermanent && widget.room.expiresAt != null)
+                  _buildInfoRow(
+                    context,
+                    'Expires',
+                    _formatExpiry(widget.room.expiresAt!),
+                    Icons.access_time,
+                  ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Participants',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                PagedParticipantList(roomId: widget.room.id),
+                const SizedBox(height: 16),
+                Consumer<AuthProvider>(
+                  builder: (context, authProvider, _) {
+                    if (authProvider.currentUser == null) {
+                      Navigator.of(context).pushReplacementNamed('/login');
+                      return const SizedBox.shrink();
+                    }
+                    final isCreator = widget.room.creatorId == authProvider.currentUser!.id;
+                    if (!isCreator) return const SizedBox.shrink();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _showEditDialog(context),
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Edit Room'),
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: _isDeleting ? null : () => _confirmDelete(context),
+                          icon: const Icon(Icons.delete),
+                          label: _isDeleting
+                              ? const CircularProgressIndicator()
+                              : const Text('Delete Room'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            foregroundColor: Theme.of(context).colorScheme.onError,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(value),
+        ],
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Room'),
+        content: const Text('Room editing coming soon!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Room'),
+        content: const Text(
+          'Are you sure you want to delete this room? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      setState(() {
+        _isDeleting = true;
+        _opacity = 0.5;
+        _controller.forward();
+      });
+      try {
+        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        final notificationService = Provider.of<NotificationService>(context, listen: false);
+
+        await notificationService.notifyRoomDeletion(widget.room.id, widget.room.participantIds);
+        await chatProvider.deleteRoomWithRetry(widget.room.id);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Room deleted successfully'),
+              action: SnackBarAction(
+                label: 'Dismiss',
+                onPressed: () {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                },
+              ),
+            ),
+          );
+          Navigator.of(context).pop();
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(Strings.deleteRoomError)),
+          );
+        }
+      } finally {
+        if (context.mounted && mounted) {
+          setState(() {
+            _isDeleting = false;
+            _opacity = 1.0;
+            _controller.reverse();
+          });
+        }
+      }
+    }
+  }
+
+  String _formatExpiry(DateTime expiryDate) {
+    final now = DateTime.now();
+    final difference = expiryDate.difference(now);
+
+    if (difference.isNegative) {
+      return 'Expired';
+    } else if (difference.inHours < 1) {
+      return 'in ${difference.inMinutes}m';
+    } else if (difference.inDays < 1) {
+      return 'in ${difference.inHours}h';
+    } else {
+      return 'in ${difference.inDays}d';
+    }
+  }
+}
+
+# File: lib/utils.dart
+import 'package:flutter/material.dart';
+
+String formatTime(DateTime time) {
+  final now = DateTime.now();
+  final timeUtc = time.toUtc();
+  final nowUtc = now.toUtc();
+  final localTime = timeUtc.toLocal();
+  final today = DateTime(nowUtc.year, nowUtc.month, nowUtc.day);
+  final messageDate = DateTime(localTime.year, localTime.month, localTime.day);
+
+  if (messageDate == today) {
+    return '${localTime.hour.toString().padLeft(2, '0')}:${localTime.minute.toString().padLeft(2, '0')}';
+  } else if (messageDate == today.subtract(const Duration(days: 1))) {
+    return 'Yesterday ${localTime.hour.toString().padLeft(2, '0')}:${localTime.minute.toString().padLeft(2, '0')}';
+  } else {
+    return '${localTime.day}/${localTime.month} ${localTime.hour.toString().padLeft(2, '0')}:${localTime.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+# File: lib/theme_config.dart
+import 'package:flutter/material.dart';
+
+class ThemeConfig {
+  static const EdgeInsets defaultPadding = EdgeInsets.all(16.0);
+}
+
+# File: lib/services/notification_service.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../providers/chat_provider.dart';
+import 'dart:async';
+import '../strings.dart';
+import 'push_notification_service.dart';
+import 'notification_scheduler.dart';
+import '../utils/encryption_utils.dart';
+import '../utils/circuit_breaker.dart';
+import 'package:aws_dynamodb/aws_dynamodb.dart';
+import 'package:aws_credentials/aws_credentials.dart';
+import 'rate_limiter.dart';
+
+class NotificationService with ChangeNotifier {
+  final List<String> _notifications = [];
+  final Map<String, String> _notificationCache = {};
+  final Map<String, VoidCallback> _listeners = {};
+  Timer? _timeoutTimer;
+  static const int _connectionTimeoutSeconds = 30;
+  static const int _maxNotificationsPerMinute = 10;
+  final AWSDynamoDB _dynamoDb;
+  final RateLimiter _rateLimiter;
+  bool _roomDeletionNotificationsEnabled = true;
+  final NotificationScheduler _scheduler = NotificationScheduler();
+  late CircuitBreaker _circuitBreaker;
+
+  NotificationService()
+      : _rateLimiter = RateLimiter(maxActionsPerMinute: 10),
+        _dynamoDb = AWSDynamoDB(
+          region: 'us-east-1',
+          credentials: AWSCredentialsProvider().getCredentials(),
+        ) {
+    _circuitBreaker = CircuitBreaker(
+      failureThreshold: 5,
+      resetTimeout: const Duration(seconds: 30),
+      onExecute: notifyListeners,
+    );
+  }
+
+  List<String> get notifications => _notifications;
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    _roomDeletionNotificationsEnabled = prefs.getBool('roomDeletionNotifications') ?? true;
+    notifyListeners();
+  }
+
+  void initialize(BuildContext context) async {
+    await _loadPreferences();
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+
+    _timeoutTimer = Timer(Duration(seconds: _connectionTimeoutSeconds), () {
+      if (_notifications.isEmpty) {
+        notifyListeners();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(Strings.notificationServiceError)),
+        );
+      }
+    });
+
+    chatProvider.subscribeToRoomDeletion((roomId) async {
+      if (!_roomDeletionNotificationsEnabled) return;
+      if (!await _rateLimiter.allowAction(roomId)) {
+        _notifications.add('Room $roomId has been deleted (queued due to rate limit).');
+        return;
+      }
+
+      try {
+        await _circuitBreaker.execute(() async {
+          final roomIdSanitized = roomId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+          final notificationKey = 'delete_$roomIdSanitized';
+          if (_notificationCache.containsKey(notificationKey)) {
+            return;
+          }
+
+          _notificationCache[notificationKey] = roomIdSanitized;
+          _notifications.add('Room $roomIdSanitized has been deleted.');
+          notifyListeners();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Room $roomIdSanitized has been deleted.')),
+          );
+
+          _timeoutTimer?.cancel();
+        });
+      } catch (e) {
+        // Log circuit breaker failure
+      }
+    });
+  }
+
+  Future<void> notifyRoomDeletion(String roomId, List<String> participantIds) async {
+    if (participantIds.isEmpty) return;
+
+    final pushService = Provider.of<PushNotificationService>(context, listen: false);
+    final title = 'Room Deleted';
+    final body = 'Room $roomId has been deleted.';
+    final encryptedTitle = await EncryptionUtils.encryptData(title);
+    final encryptedBody = await EncryptionUtils.encryptData(body);
+
+    for (var participantId in participantIds) {
+      bool isOffline = await _isUserOffline(participantId);
+      if (isOffline && _roomDeletionNotificationsEnabled) {
+        try {
+          await _circuitBreaker.execute(() async {
+            await _scheduler.scheduleNotification(
+              title: encryptedTitle,
+              body: encryptedBody,
+              userId: participantId,
+              pushService: pushService,
+            );
+          });
+        } catch (e) {
+          await pushService._logSchedulingFailure(participantId, e.toString());
+        }
+      }
+    }
+  }
+
+  Future<bool> _isUserOffline(String userId) async {
+    final response = await _dynamoDb.getItem(
+      tableName: 'UserStatus',
+      key: {'userId': {'S': userId}},
+    );
+    return response.item?['isOffline']?['BOOL'] ?? true;
+  }
+
+  Future<void> setRoomDeletionNotificationsEnabled(bool enabled) async {
+    if (!await _rateLimiter.allowAction('preference_update')) {
+      throw Exception('Rate limit exceeded for preference updates');
+    }
+    _roomDeletionNotificationsEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('roomDeletionNotifications', enabled);
+    notifyListeners();
+    _listeners.values.forEach((listener) => listener());
+  }
+
+  void addPreferenceListener(String key, VoidCallback listener) {
+    _listeners[key] = listener;
+  }
+
+  void removePreferenceListener(String key) {
+    _listeners.remove(key);
+  }
+
+  bool get roomDeletionNotificationsEnabled => _roomDeletionNotificationsEnabled;
+
+  @override
+  void dispose() {
+    _timeoutTimer?.cancel();
+    _circuitBreaker.dispose();
+    _listeners.clear();
+    super.dispose();
+  }
+}
+
+# File: lib/services/image_cache_service.dart
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class ImageCacheService {
+  static const int _cacheExpiryDays = 30;
+
+  Future<void> validateImage(XFile image) async {
+    try {
+      final file = File(image.path);
+      final fileSize = await file.length();
+      if (fileSize > 5 * 1024 * 1024) {
+        throw Exception('Image size exceeds 5MB limit');
+      }
+      final extension = image.path.toLowerCase().split('.').last;
+      if (!['jpg', 'jpeg', 'png'].contains(extension)) {
+        throw Exception('Only JPEG and PNG images are allowed');
+      }
+    } catch (e) {
+      throw Exception('Image validation failed: $e');
+    }
+  }
+
+  Future<void> cacheImage(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    final batch = prefs;
+    await batch.setString('avatar_$url', url);
+    await batch.setInt('avatar_${url}_expiry', DateTime.now().add(Duration(days: _cacheExpiryDays)).millisecondsSinceEpoch);
+    await batch.commit();
+  }
+}
+
+# File: lib/strings.dart
+class Strings {
+  static const String locationError = 'Location data is outdated or unavailable';
+  static const String invalidRadiusError = 'Radius must be between 50m and 1000m';
+  static const String roomNameExistsError = 'Room name already exists';
+  static const String roomNameEmptyError = 'Please enter a room name';
+  static const String roomNameTooShortError = 'Room name must be at least 3 characters';
+  static const String roomCreatedSuccess = 'Room created successfully';
+  static const String createRoomError = 'Failed to create room. Please try again.';
+  static const String deleteRoomError = 'Failed to delete room. Please try again.';
+  static const String notificationServiceError = 'Failed to connect to notification service.';
+  static const String feedbackSuccess = 'Feedback submitted successfully';
+  static const String feedbackError = 'Failed to submit feedback. Please try again.';
+  static const String notificationRateLimitError = 'Too many notifications sent. Please try again later.';
+  static const String analyticsFetchError = 'Failed to fetch feedback analytics. Please try again.';
+  static const String notificationScheduleError = 'Failed to schedule notification. Please try again.';
+  static const String retryNotificationError = 'Failed to retry notification. Please try again later.';
+  static const String notificationFrequencyImmediate = 'Immediate';
+  static const String notificationFrequencyHourly = 'Hourly';
+  static const String notificationFrequencyDaily = 'Daily';
+  static const String notificationChannelPush = 'Push';
+  static const String notificationChannelEmail = 'Email';
+  static const String notificationChannelSMS = 'SMS';
+}
+
+# File: lib/widgets/notification_settings.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/notification_service.dart';
+import '../services/push_notification_service.dart';
+import '../strings.dart';
+
+class NotificationSettings extends StatefulWidget {
+  const NotificationSettings({super.key});
+
+  @override
+  State<NotificationSettings> createState() => _NotificationSettingsState();
+}
+
+class _NotificationSettingsState extends State<NotificationSettings> {
+  bool _isSaving = false;
+  String _notificationFrequency = Strings.notificationFrequencyImmediate;
+  String _notificationChannel = Strings.notificationChannelPush;
+
+  static const List<String> _frequencies = [
+    Strings.notificationFrequencyImmediate,
+    Strings.notificationFrequencyHourly,
+    Strings.notificationFrequencyDaily,
+  ];
+
+  static const List<String> _channels = [
+    Strings.notificationChannelPush,
+    Strings.notificationChannelEmail,
+    Strings.notificationChannelSMS,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final pushService = Provider.of<PushNotificationService>(context, listen: false);
+    final frequency = await pushService.getNotificationFrequency();
+    final channel = await pushService.getNotificationChannel();
+    setState(() {
+      _notificationFrequency = frequency;
+      _notificationChannel = channel;
+    });
+  }
+
+  Future<void> _saveFrequencyPreference(String frequency) async {
+    final pushService = Provider.of<PushNotificationService>(context, listen: false);
+    await pushService.setNotificationFrequency(frequency);
+  }
+
+  Future<void> _saveChannelPreference(String channel) async {
+    final pushService = Provider.of<PushNotificationService>(context, listen: false);
+    await pushService.setNotificationChannel(channel);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notification Settings'),
+      ),
+      body: Consumer<NotificationService>(
+        builder: (context, notificationService, _) {
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  child: SwitchListTile(
+                    title: const Text('Room Deletion Notifications'),
+                    subtitle: const Text('Receive notifications when a room is deleted'),
+                    value: notificationService.roomDeletionNotificationsEnabled,
+                    onChanged: (value) async {
+                      setState(() => _isSaving = true);
+                      try {
+                        await notificationService.setRoomDeletionNotificationsEnabled(value);
+                        await showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Settings Saved'),
+                            content: const Text('Your notification preferences have been updated.'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to update settings: $e'),
+                            backgroundColor: Theme.of(context).colorScheme.error.withOpacity(0.9),
+                          ),
+                        );
+                      } finally {
+                        setState(() => _isSaving = false);
+                      }
+                    },
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _notificationFrequency,
+                  decoration: InputDecoration(
+                    labelText: 'Notification Frequency',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  items: _frequencies.map((frequency) {
+                    return DropdownMenuItem<String>(
+                      value: frequency,
+                      child: Text(frequency),
+                    );
+                  }).toList(),
+                  onChanged: (value) async {
+                    setState(() {
+                      _isSaving = true;
+                      _notificationFrequency = value!;
+                    });
+                    try {
+                      await _saveFrequencyPreference(value!);
+                      await showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Settings Saved'),
+                          content: const Text('Your notification frequency has been updated.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to update frequency: $e'),
+                          backgroundColor: Theme.of(context).colorScheme.error.withOpacity(0.9),
+                        ),
+                      );
+                    } finally {
+                      setState(() => _isSaving = false);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _notificationChannel,
+                  decoration: InputDecoration(
+                    labelText: 'Notification Channel',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  items: _channels.map((channel) {
+                    return DropdownMenuItem<String>(
+                      value: channel,
+                      child: Text(channel),
+                    );
+                  }).toList(),
+                  onChanged: (value) async {
+                    setState(() {
+                      _isSaving = true;
+                      _notificationChannel = value!;
+                    });
+                    try {
+                      await _saveChannelPreference(value!);
+                      await showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Settings Saved'),
+                          content: const Text('Your notification channel has been updated.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to update channel: $e'),
+                          backgroundColor: Theme.of(context).colorScheme.error.withOpacity(0.9),
+                        ),
+                      );
+                    } finally {
+                      setState(() => _isSaving = false);
+                    }
+                  },
+                ),
+                if (_isSaving) const CircularProgressIndicator(),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+# File: lib/services/push_notification_service.dart
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:aws_sns/aws_sns.dart';
+import 'package:aws_ses/aws_ses.dart';
+import 'dart:async';
+import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../strings.dart';
+import 'package:aws_dynamodb/aws_dynamodb.dart';
+import '../utils/encryption_utils.dart';
+import '../utils/cache_manager.dart';
+import 'package:aws_credentials/aws_credentials.dart';
+import 'rate_limiter.dart';
+
+class PushNotificationService {
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  final AWSSNS _snsClient;
+  final AWSSES _sesClient;
+  final AWSDynamoDB _dynamoDb;
+  final RateLimiter _rateLimiter;
+  final CacheManager _cacheManager = CacheManager();
+  final Map<String, List<Map<String, String>>> _pendingNotifications = {};
+  final Map<String, String> _endpointCache = {};
+  Timer? _resetTimer;
+  static const int _batchSize = 100;
+  static const int _maxRetries = 3;
+  static const int _baseRetryDelayMs = 500;
+
+  PushNotificationService()
+      : _rateLimiter = RateLimiter(maxActionsPerMinute: 5),
+        _snsClient = AWSSNS(
+          region: 'us-east-1',
+          credentials: AWSCredentialsProvider().getCredentials(),
+        ),
+        _sesClient = AWSSES(
+          region: 'us-east-1',
+          credentials: AWSCredentialsProvider().getCredentials(),
+        ),
+        _dynamoDb = AWSDynamoDB(
+          region: 'us-east-1',
+          credentials: AWSCredentialsProvider().getCredentials(),
+        ) {
+    _loadEndpointCache();
+  }
+
+  Future<void> _loadEndpointCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedEndpoints = prefs.getString('sns_endpoints')?.split(';') ?? [];
+    for (var entry in cachedEndpoints) {
+      if (entry.isNotEmpty) {
+        final parts = entry.split(':');
+        if (parts.length == 2) {
+          _endpointCache[parts[0]] = parts[1];
+        }
+      }
+    }
+  }
+
+  Future<void> _saveEndpointCache(String userId, String endpointArn) async {
+    _endpointCache[userId] = endpointArn;
+    final prefs = await SharedPreferences.getInstance();
+    final cacheString = _endpointCache.entries.map((e) => '${e.key}:${e.value}').join(';');
+    await prefs.setString('sns_endpoints', cacheString);
+  }
+
+  Future<void> initialize() async {
+    await _firebaseMessaging.requestPermission();
+    final token = await _firebaseMessaging.getToken();
+    if (token != null) {
+      await _snsClient.createPlatformEndpoint(
+        platformApplicationArn: 'arn:aws:sns:us-east-1:123456789012:app/GCM/SifterApp',
+        token: token,
+      );
+    }
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {});
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    _resetTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      _pendingNotifications.clear();
+    });
+
+    Timer.periodic(const Duration(minutes: 1), (timer) async {
+      await _processScheduledNotifications();
+      await _processPendingNotifications();
+    });
+  }
+
+  Future<void> sendNotification(String title, String body, {String? userId}) async {
+    final userKey = userId ?? 'default';
+    if (!await _rateLimiter.allowAction(userKey)) {
+      await _logRateLimitViolation(userKey);
+      throw Exception(Strings.notificationRateLimitError);
+    }
+
+    final channel = await getNotificationChannel(userId: userKey);
+    final frequency = await getNotificationFrequency(userId: userKey);
+
+    if (frequency != Strings.notificationFrequencyImmediate) {
+      _pendingNotifications[userKey] = _pendingNotifications[userKey] ?? [];
+      _pendingNotifications[userKey]!.add({
+        'title': title,
+        'body': body,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      return;
+    }
+
+    int retryCount = 0;
+    while (retryCount < _maxRetries) {
+      try {
+        switch (channel) {
+          case Strings.notificationChannelPush:
+            await _sendPushNotification(title, body, userKey);
+            break;
+          case Strings.notificationChannelEmail:
+            await _sendEmailNotification(title, body, userKey);
+            break;
+          case Strings.notificationChannelSMS:
+            await _sendSMSNotification(title, body, userKey);
+            break;
+          default:
+            await _sendPushNotification(title, body, userKey);
+        }
+        return;
+      } catch (e) {
+        retryCount++;
+        if (retryCount >= _maxRetries) {
+          await _logSchedulingFailure(userKey, 'Max retries reached: $e');
+          throw Exception('Failed to send notification: $e');
+        }
+        final delay = _baseRetryDelayMs * pow(2, retryCount) + Random().nextInt(100);
+        await Future.delayed(Duration(milliseconds: delay.toInt()));
+      }
+    }
+  }
+
+  Future<void> sendBatchNotifications(List<Map<String, String>> notifications, {String? userId}) async {
+    final userKey = userId ?? 'default';
+    for (var i = 0; i < notifications.length; i += _batchSize) {
+      final batch = notifications.sublist(i, i + _batchSize > notifications.length ? notifications.length : i + _batchSize);
+      int retryCount = 0;
+      while (retryCount < _maxRetries) {
+        try {
+          final channel = await getNotificationChannel(userId: userKey);
+          switch (channel) {
+            case Strings.notificationChannelPush:
+              await _sendBatchPushNotifications(batch, userKey);
+              break;
+            case Strings.notificationChannelEmail:
+              for (var notification in batch) {
+                await _sendEmailNotification(notification['title']!, notification['body']!, userKey);
+              }
+              break;
+            case Strings.notificationChannelSMS:
+              for (var notification in batch) {
+                await _sendSMSNotification(notification['title']!, notification['body']!, userKey);
+              }
+              break;
+            default:
+              await _sendBatchPushNotifications(batch, userKey);
+          }
+          return;
+        } catch (e) {
+          retryCount++;
+          if (retryCount >= _maxRetries) {
+            await _logSchedulingFailure(userKey, 'Max retries reached: $e');
+            throw Exception('Failed to send batch notifications: $e');
+          }
+          final delay = _baseRetryDelayMs * pow(2, retryCount) + Random().nextInt(100);
+          await Future.delayed(Duration(milliseconds: delay.toInt()));
+        }
+      }
+    }
+  }
+
+  Future<void> _sendBatchPushNotifications(List<Map<String, String>> notifications, String userId) async {
+    final encryptedUserId = await EncryptionUtils.encryptData(userId);
+    final endpointArn = _endpointCache[userId] ?? 'arn:aws:sns:us-east-1:123456789012:user-$encryptedUserId';
+    final messages = notifications.map((n) => {
+          'Message': '{"default": "${n['title']}: ${n['body']}"}',
+          'TargetArn': endpointArn,
+          'MessageStructure': 'json',
+        }).toList();
+    await _snsClient.batchPublish(messages: messages);
+    if (!_endpointCache.containsKey(userId)) {
+      await _saveEndpointCache(userId, endpointArn);
+    }
+  }
+
+  Future<void> _sendPushNotification(String title, String body, String userId) async {
+    final encryptedUserId = await EncryptionUtils.encryptData(userId);
+    final endpointArn = _endpointCache[userId] ?? 'arn:aws:sns:us-east-1:123456789012:user-$encryptedUserId';
+    await _snsClient.publish(
+      message: '{"default": "$title: $body"}',
+      targetArn: endpointArn,
+      messageStructure: 'json',
+    );
+    if (!_endpointCache.containsKey(userId)) {
+      await _saveEndpointCache(userId, endpointArn);
+    }
+  }
+
+  Future<void> _sendEmailNotification(String title, String body, String userId) async {
+    final userEmail = await _fetchUserEmail(userId);
+    await _sesClient.sendEmail(
+      source: 'no-reply@sifterapp.com',
+      destination: {'ToAddresses': [userEmail]},
+      message: {
+        'Subject': {'Data': title},
+        'Body': {'Text': {'Data': body}},
+      },
+    );
+  }
+
+  Future<void> _sendSMSNotification(String title, String body, String userId) async {
+    final userPhoneNumber = await _fetchUserPhoneNumber(userId);
+    await _snsClient.publish(
+      message: '$title: $body',
+      phoneNumber: userPhoneNumber,
+    );
+  }
+
+  Future<void> schedulePushNotification({
+    required String title,
+    required String body,
+    required String userId,
+    required DateTime scheduledTime,
+  }) async {
+    try {
+      final userTimeZone = await _fetchUserTimeZone(userId);
+      final sanitizedTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '');
+      final sanitizedBody = body.replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '');
+      await _dynamoDb.putItem(
+        tableName: 'ScheduledNotifications',
+        item: {
+          'id': {'S': '${userId}_${DateTime.now().millisecondsSinceEpoch}'},
+          'userId': {'S': userId},
+          'title': {'S': sanitizedTitle},
+          'body': {'S': sanitizedBody},
+          'scheduledTime': {'S': scheduledTime.toIso8601String()},
+          'timeZone': {'S': userTimeZone},
+        },
+      );
+    } catch (e) {
+      throw Exception(Strings.notificationScheduleError);
+    }
+  }
+
+  Future<void> _processScheduledNotifications() async {
+    try {
+      final response = await _dynamoDb.query(
+        tableName: 'ScheduledNotifications',
+        indexName: 'ScheduledTimeIndex',
+        keyConditionExpression: 'scheduledTime <= :now',
+        expressionAttributeValues: {
+          ':now': {'S': DateTime.now().toIso8601String()},
+        },
+      );
+      final items = response.items ?? [];
+      final now = DateTime.now();
+
+      final notificationsByUser = <String, List<Map<String, String>>>{};
+      for (var item in items) {
+        final scheduledTimeStr = item['scheduledTime']!['S']!;
+        final scheduledTime = DateTime.parse(scheduledTimeStr);
+        if (now.isAfter(scheduledTime) || now.isAtSameMomentAs(scheduledTime)) {
+          final userId = item['userId']!['S']!;
+          notificationsByUser[userId] = notificationsByUser[userId] ?? [];
+          notificationsByUser[userId]!.add({
+            'title': item['title']!['S']!,
+            'body': item['body']!['S']!,
+          });
+        }
+      }
+
+      for (var userId in notificationsByUser.keys) {
+        bool success = false;
+        int retryCount = 0;
+        while (!success && retryCount < _maxRetries) {
+          try {
+            await sendBatchNotifications(notificationsByUser[userId]!, userId: userId);
+            success = true;
+            for (var item in items.where((i) => i['userId']!['S'] == userId)) {
+              await _dynamoDb.deleteItem(
+                tableName: 'ScheduledNotifications',
+                key: {'id': {'S': item['id']!['S']!}},
+              );
+            }
+          } catch (e) {
+            retryCount++;
+            if (retryCount >= _maxRetries) {
+              await _logSchedulingFailure(userId, 'Max retries reached: $e');
+              throw Exception(Strings.retryNotificationError);
+            }
+            final delay = _baseRetryDelayMs * pow(2, retryCount) + Random().nextInt(100);
+            await Future.delayed(Duration(milliseconds: delay.toInt()));
+          }
+        }
+      }
+    } catch (e) {
+      await _logSchedulingFailure('system', e.toString());
+    }
+  }
+
+  Future<void> _processPendingNotifications() async {
+    for (var userId in _pendingNotifications.keys) {
+      final frequency = await getNotificationFrequency(userId: userId);
+      final notifications = _pendingNotifications[userId] ?? [];
+      if (notifications.isEmpty) continue;
+
+      bool shouldSend = false;
+      final now = DateTime.now();
+      final lastNotificationTime = notifications.isNotEmpty
+          ? DateTime.parse(notifications.first['timestamp']!)
+          : now;
+
+      switch (frequency) {
+        case Strings.notificationFrequencyHourly:
+          shouldSend = now.difference(lastNotificationTime).inHours >= 1;
+          break;
+        case Strings.notificationFrequencyDaily:
+          shouldSend = now.difference(lastNotificationTime).inDays >= 1;
+          break;
+        default:
+          continue;
+      }
+
+      if (shouldSend) {
+        try {
+          await sendBatchNotifications(notifications, userId: userId);
+          _pendingNotifications[userId]!.clear();
+        } catch (e) {
+          await _logSchedulingFailure(userId, 'Failed to send digest: $e');
+        }
+      }
+    }
+  }
+
+  Future<void> _logRateLimitViolation(String userId) async {
+    await _dynamoDb.putItem(
+      tableName: 'NotificationRateLimitLogs',
+      item: {
+        'id': {'S': '${userId}_${DateTime.now().millisecondsSinceEpoch}'},
+        'userId': {'S': userId},
+        'timestamp': {'S': DateTime.now().toIso8601String()},
+      },
+    );
+  }
+
+  Future<void> _logSchedulingFailure(String userId, String error) async {
+    await _dynamoDb.putItem(
+      tableName: 'NotificationSchedulingFailures',
+      item: {
+        'id': {'S': '${userId}_${DateTime.now().millisecondsSinceEpoch}'},
+        'userId': {'S': userId},
+        'error': {'S': error},
+        'timestamp': {'S': DateTime.now().toIso8601String()},
+      },
+    );
+  }
+
+  Future<String> _fetchUserTimeZone(String userId) async {
+    return await _cacheManager.get(
+      'timezone:$userId',
+      () async {
+        final response = await _dynamoDb.getItem(
+          tableName: 'UserProfiles',
+          key: {'userId': {'S': userId}},
+        );
+        return response.item?['timeZone']?['S'] ?? 'UTC';
+      },
+    );
+  }
+
+  Future<String> _fetchUserEmail(String userId) async {
+    return await _cacheManager.get(
+      'email:$userId',
+      () async {
+        final response = await _dynamoDb.getItem(
+          tableName: 'UserProfiles',
+          key: {'userId': {'S': userId}},
+        );
+        return response.item?['email']?['S'] ?? 'user@example.com';
+      },
+    );
+  }
+
+  Future<String> _fetchUserPhoneNumber(String userId) async {
+    return await _cacheManager.get(
+      'phone:$userId',
+      () async {
+        final response = await _dynamoDb.getItem(
+          tableName: 'UserProfiles',
+          key: {'userId': {'S': userId}},
+        );
+        return response.item?['phoneNumber']?['S'] ?? '+1234567890';
+      },
+    );
+  }
+
+  Future<String> getNotificationFrequency({String? userId}) async {
+    try {
+      final userKey = userId ?? 'default';
+      final response = await _dynamoDb.getItem(
+        tableName: 'UserPreferences',
+        key: {'userId': {'S': userKey}},
+      );
+      final encryptedFrequency = response
