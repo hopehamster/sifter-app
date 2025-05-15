@@ -40,7 +40,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>This app need camera access for taking photo for user profile picture.</string>
+	<string>This app needs camera access for taking photo for user profile picture.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs accesss to location to manage delivery address when add a new address.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
