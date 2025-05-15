@@ -1,96 +1,42 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthProvider with ChangeNotifier {
-  User? _user;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
-
-  bool isAdmin = false;
-
-  User? get user => _user;
-  String? userId;
-  String? userEmail;
-  bool get isLoggedIn => _user != null;
+  User? _user;
   String? _userId;
+  bool _isAdmin = false;
 
   AuthProvider() {
-    // login();
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      // if (user != null) {
-      user = user;
-      userId = user!.uid;
-      userEmail = user.email;
+    _auth.authStateChanges().listen((user) {
+      _user = user;
+      _userId = user?.uid;
       if (_userId != null) {
         _checkAdminStatus();
       }
       notifyListeners();
     });
-    // Initialize auth state listener
-    // _auth.authStateChanges().listen(_onAuthStateChanged);
   }
 
-  // void _onAuthStateChanged(User? user) {
-  //   _auth.authStateChanges().listen(_onAuthStateChanged);
+  User? get user => _user;
+  String? get userId => _userId;
+  bool get isAdmin => _isAdmin;
 
-  //   _user = user;
-  //   print('object $user');
-  //   notifyListeners();
-  // }
-  Future<void> _checkAdminStatus() async {
-    final snapshot = await _db.child('admins/$_userId').get();
-    isAdmin = snapshot.exists;
-    notifyListeners();
-  }
-
-  Future<User?> login(String email, String password) async {
+  Future<void> signInWithEmail(String email, String password) async {
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: email.trim(),
-        password: password.trim(),
-      );
-      return userCredential.user;
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(_getErrorMessage(e.code));
+      await _auth.signInWithEmailAndPassword(email: email, password: password);
     } catch (e) {
-      throw AuthException('Login failed: ${e.toString()}');
+      throw Exception('Login failed: $e');
     }
   }
 
-  Future<User?> signup(String email, String password) async {
+  Future<void> signUpWithEmail(String email, String password) async {
     try {
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email.trim(),
-        password: password.trim(),
-      );
-      return userCredential.user;
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(_getErrorMessage(e.code));
+      await _auth.createUserWithEmailAndPassword(email: email, password: password);
     } catch (e) {
-      throw AuthException('Signup failed: ${e.toString()}');
-    }
-  }
-
-  Future<void> logout(BuildContext context) async {
-    try {
-      await _auth.signOut();
-      Navigator.of(context).pushReplacementNamed('/login');
-      // No need to set persistence to NONE - this actually prevents automatic login
-    } catch (e) {
-      throw AuthException('Logout failed: ${e.toString()}');
-    }
-  }
-
-  Future<String?> getValidToken() async {
-    try {
-      if (_user != null) {
-        return await _user!.getIdToken(true);
-      }
-      return null;
-    } catch (e) {
-      // await logout(context);
-      throw AuthException('Session expired. Please log in again.');
+      throw Exception('Sign-up failed: $e');
     }
   }
 
@@ -124,34 +70,21 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  String _getErrorMessage(String code) {
-    switch (code) {
-      case 'invalid-email':
-        return 'The email address is badly formatted.';
-      case 'user-disabled':
-        return 'This user has been disabled.';
-      case 'user-not-found':
-        return 'No user found with this email.';
-      case 'wrong-password':
-        return 'Wrong password provided.';
-      case 'email-already-in-use':
-        return 'Email already in use.';
-      case 'operation-not-allowed':
-        return 'Email/password accounts are not enabled.';
-      case 'weak-password':
-        return 'Password should be at least 6 characters.';
-      case 'network-request-failed':
-        return 'Network error. Please check your connection.';
-      default:
-        return 'An unknown error occurred.';
+  Future<void> signInAnonymously() async {
+    try {
+      await _auth.signInAnonymously();
+    } catch (e) {
+      throw Exception('Anonymous sign-in failed: $e');
     }
   }
-}
 
-class AuthException implements Exception {
-  final String message;
-  AuthException(this.message);
+  Future<void> signOut() async {
+    await _auth.signOut();
+  }
 
-  @override
-  String toString() => message;
+  Future<void> _checkAdminStatus() async {
+    final snapshot = await _db.child('admins/$_userId').get();
+    _isAdmin = snapshot.exists;
+    notifyListeners();
+  }
 }
