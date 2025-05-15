@@ -1,13 +1,9 @@
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:provider/provider.dart' show Provider;
-import 'package:url_launcher/url_launcher.dart';
-import 'package:provider/provider.dart' as d;
-// import 'package:sifter/providers/auth_provider.dart' as ad;
-import 'package:sifter/providers/auth_provider.dart' as e;
-
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import '../services/location_service.dart';
+import '../widgets/logout_dialog.dart';
+import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -24,12 +20,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _checkLocationStatus() async {
-    setState(() async =>
-        _locationEnabled = await LocationService.isLocationEnabled());
+    setState(() => _locationEnabled = await LocationService.isLocationEnabled());
   }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
     return Scaffold(
       appBar: AppBar(title: Text('Settings')),
       body: ListView(
@@ -47,6 +43,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               }
             },
           ),
+          if (authProvider.user?.isAnonymous ?? true) // Show for anonymous users
+            ListTile(
+              title: Text('Create Account'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => LoginScreen()),
+              ),
+            ),
+          if (!(authProvider.user?.isAnonymous ?? true)) // Show Log Out for non-anonymous users
+            ListTile(
+              title: Text('Log Out'),
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => LogoutDialog(),
+              ),
+            ),
         ],
       ),
     );
