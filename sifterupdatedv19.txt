@@ -1,0 +1,852 @@
+```
+Sifter v19 Codebase (Single Text File)
+
+This is the complete Sifter v19 codebase for a Flutter chat app with temporary, geofenced rooms on AWS Amplify. Copy this text, paste into a Notes app or email, and save as sifter_v19_code.txt. Share with your developer to split into files and ZIP.
+
+Instructions:
+1. Mobile: Tap and hold to copy this text. Paste into Apple Notes, Google Keep, or email. Save as sifter_v19_code.txt or email (subject: Sifter Code).
+2. Share: Email to your developer or upload to Google Drive/Dropbox.
+3. Developer: Create sifter-v19/ folder with subfolders: backend/, frontend/, admin-panel/. Split text at headers (e.g., --- backend/schema.graphql ---) into files. ZIP folder: Right-click > Compress (Mac) or Send to > Compressed (Windows).
+4. WhatsApp: Update +1234567890 in frontend/settings_screen.dart with your number.
+5. Deployment: See artifact ID: 5b73e0d7-7cfd-47fb-ac7f-61b4c719ade2 for AWS, Flutter, app store setup.
+
+Folder Structure:
+sifter-v19/
+├── backend/
+│   └── schema.graphql
+│   └── profanity_filter.js
+│   └── account_deletion.js
+├── frontend/
+│   └── main.dart
+│   └── settings_screen.dart
+│   └── chat_room_create_screen.dart
+│   └── join_room_screen.dart
+│   └── chat_screen.dart
+│   └── home_screen.dart
+│   └── profile_screen.dart
+│   └── pubspec.yaml
+├── admin-panel/
+│   └── package.json
+│   └── index.js
+│   └── Users.js
+│   └── Rooms.js
+│   └── Analytics.js
+
+--- backend/schema.graphql ---
+type ChatRoom @model {
+  id: ID!
+  creatorId: String!
+  radius: Float!
+  location: AWSGeoPoint!
+  name: String!
+  description: String
+  isNsfw: Boolean!
+  password: String
+  participants: [String]
+  blockedUsers: [String]
+}
+type Message @model {
+  id: ID!
+  roomId: ID!
+  userId: String!
+  content: String!
+  createdAt: AWSDateTime!
+}
+type Mutation {
+  createChatRoom(input: CreateChatRoomInput!): ChatRoom
+  joinRoom(roomId: ID!, userId: String!, password: String): Boolean
+  sendMessage(roomId: ID!, userId: String!, content: String!): Message
+  deleteMessage(roomId: ID!, messageId: ID!, creatorId: String!): Boolean
+  bootUser(roomId: ID!, userId: String!, creatorId: String!): Boolean
+  blockUser(roomId: ID!, userId: String!, creatorId: String!): Boolean
+  deleteChatRoom(roomId: ID!): Boolean
+  deleteAccount(userId: String!): Boolean
+}
+
+--- backend/profanity_filter.js ---
+const BadWords = require('bad-words');
+const filter = new BadWords();
+exports.handler = async (event) => {
+  const text = event.arguments.content;
+  return filter.clean(text);
+};
+
+--- backend/account_deletion.js ---
+const AWS = require('aws-sdk');
+const docClient = new AWS.DynamoDB.DocumentClient();
+exports.handler = async (event) => {
+  const userId = event.arguments.userId;
+  await docClient.delete({ TableName: 'Message', Key: { userId } }).promise();
+  await docClient.delete({ TableName: 'ChatRoom', Key: { creatorId: userId } }).promise();
+  return true;
+};
+
+--- frontend/pubspec.yaml ---
+name: sifter
+version: 1.0.0
+dependencies:
+  flutter:
+    sdk: flutter
+  amplify_flutter: ^1.0.0
+  amplify_auth_cognito: ^1.0.0
+  amplify_api: ^1.0.0
+  provider: ^6.0.0
+  flutter_map: ^6.0.0
+  url_launcher: ^6.2.0
+
+--- frontend/main.dart ---
+import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
+import 'package:amplify_api/amplify_api.dart';
+import 'amplifyconfiguration.dart';
+import 'screens/home_screen.dart';
+import 'screens/chat_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/chat_room_create_screen.dart';
+import 'screens/join_room_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Amplify.configure(amplifyconfig);
+  Amplify.addPlugins([AmplifyAuthCognito(), AmplifyAPI()]);
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      initialRoute: '/home',
+      routes: {
+        '/home': (context) => HomeScreen(),
+        '/chat': (context) => ChatScreen(),
+        '/profile': (context) => ProfileScreen(),
+        '/settings': (context) => SettingsScreen(),
+        '/create-room': (context) => ChatRoomCreateScreen(),
+        '/join-room': (context) => JoinRoomScreen(),
+      },
+      theme: ThemeData(primarySwatch: Colors.blue),
+      bottomNavigationBar: BottomNavigationBar(
+        items: [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: "Chat"),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: "Settings"),
+        ],
+        currentIndex: 0,
+        onTap: (index) {
+          switch (index) {
+            case 0: Navigator.pushNamed(context, '/home'); break;
+            case 1: Navigator.pushNamed(context, '/chat'); break;
+            case 2: Navigator.pushNamed(context, '/profile'); break;
+            case 3: Navigator.pushNamed(context, '/settings'); break;
+          }
+        },
+      ),
+    );
+  }
+}
+
+--- frontend/settings_screen.dart ---
+import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class SettingsScreen extends StatelessWidget {
+  Future<String> getUserId() async {
+    return (await Amplify.Auth.getCurrentUser()).userId;
+  }
+
+  Future<String> getUserEmail() async {
+    return (await Amplify.Auth.fetchUserAttributes())[0].value;
+  }
+
+  Future<void> resetPassword(BuildContext context) async {
+    await Amplify.Auth.forgotPassword(username: await getUserEmail());
+    Navigator.pushNamed(context, '/reset-password');
+  }
+
+  Future<void> deleteAccount(BuildContext context) async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Delete Account"),
+        content: Text("Are you sure? This cannot be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text("Delete")),
+        ],
+      ),
+    );
+    if (confirm) {
+      await Amplify.API.mutate(
+        request: GraphQLRequest<String>(
+          document: '''
+            mutation DeleteAccount($userId: String!) {
+              deleteAccount(userId: $userId)
+            }
+          ''',
+          variables: {'userId': await getUserId()},
+        ),
+      ).response;
+      await Amplify.Auth.signOut();
+      Navigator.pushReplacementNamed(context, '/login');
+    }
+  }
+
+  Future<void> contactSupport(BuildContext context) async {
+    final url = Uri.parse("https://wa.me/+1234567890?text=Hi, I need help with Sifter!");
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Could not open WhatsApp")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Settings")),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ElevatedButton(onPressed: () => resetPassword(context), child: Text("Reset Password")),
+            ElevatedButton(onPressed: () => contactSupport(context), child: Text("Contact Support")),
+            ElevatedButton(
+              onPressed: () => deleteAccount(context),
+              child: Text("Delete Account"),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+--- frontend/chat_room_create_screen.dart ---
+import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+
+class ChatRoomCreateScreen extends StatefulWidget {
+  @override
+  _ChatRoomCreateScreenState createState() => _ChatRoomCreateScreenState();
+}
+
+class _ChatRoomCreateScreenState extends State<ChatRoomCreateScreen> {
+  String name = '';
+  String description = '';
+  bool isNsfw = false;
+  String password = '';
+
+  Future<void> createRoom() async {
+    final userId = (await Amplify.Auth.getCurrentUser()).userId;
+    await Amplify.API.mutate(
+      request: GraphQLRequest<String>(
+        document: '''
+          mutation CreateChatRoom($input: CreateChatRoomInput!) {
+            createChatRoom(input: $input) { id }
+          }
+        ''',
+        variables: {
+          'input': {
+            'creatorId': userId,
+            'radius': 100.0,
+            'location': {'latitude': 37.7749, 'longitude': -122.4194},
+            'name': name,
+            'description': description.isEmpty ? null : description,
+            'isNsfw': isNsfw,
+            'password': password.isEmpty ? null : password,
+          }
+        },
+      ),
+    ).response;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Create Room")),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              decoration: InputDecoration(labelText: "Room Name (Required)"),
+              onChanged: (value) => setState(() => name = value),
+            ),
+            TextField(
+              decoration: InputDecoration(labelText: "Description (Optional)"),
+              maxLines: 3,
+              onChanged: (value) => setState(() => description = value),
+            ),
+            SwitchListTile(
+              title: Text(isNsfw ? "21+ NSFW" : "General Audiences"),
+              value: isNsfw,
+              onChanged: (value) => setState(() => isNsfw = value),
+            ),
+            TextField(
+              decoration: InputDecoration(labelText: "Password (Optional)"),
+              obscureText: true,
+              onChanged: (value) => setState(() => password = value),
+            ),
+            ElevatedButton(onPressed: createRoom, child: Text("Create")),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+--- frontend/join_room_screen.dart ---
+import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+
+class JoinRoomScreen extends StatefulWidget {
+  final dynamic room;
+  JoinRoomScreen({required this.room});
+  @override
+  _JoinRoomScreenState createState() => _JoinRoomScreenState();
+}
+
+class _JoinRoomScreenState extends State<JoinRoomScreen> {
+  String enteredPassword = '';
+
+  Future<void> joinRoom() async {
+    final userId = (await Amplify.Auth.getCurrentUser()).userId;
+    if (widget.room['isNsfw']) {
+      bool confirmed = await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text("21+ Confirmation"),
+          content: Text("This room is for users 21+. Confirm your age."),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text("Cancel")),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: Text("Confirm")),
+          ],
+        ),
+      );
+      if (!confirmed) return;
+    }
+    await Amplify.API.mutate(
+      request: GraphQLRequest<String>(
+        document: '''
+          mutation JoinRoom($roomId: ID!, $userId: String!, $password: String) {
+            joinRoom(roomId: $roomId, userId: $userId, password: $password)
+          }
+        ''',
+        variables: {
+          'roomId': widget.room['id'],
+          'userId': userId,
+          'password': enteredPassword.isEmpty ? null : enteredPassword,
+        },
+      ),
+    ).response;
+    Navigator.pushNamed(context, '/chat', arguments: widget.room);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Join Room")),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(widget.room['name'], style: TextStyle(fontSize: 24)),
+            Text(widget.room['description'] ?? "No description"),
+            Text(widget.room['isNsfw'] ? "21+ NSFW" : "General Audiences"),
+            if (widget.room['password'] != null)
+              TextField(
+                decoration: InputDecoration(labelText: "Enter Password"),
+                obscureText: true,
+                onChanged: (value) => setState(() => enteredPassword = value),
+              ),
+            ElevatedButton(onPressed: joinRoom, child: Text("Join Room")),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+--- frontend/chat_screen.dart ---
+import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+
+class ChatScreen extends StatefulWidget {
+  final dynamic room;
+  ChatScreen({required this.room});
+  @override
+  _ChatScreenState createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  String message = '';
+  List messages = [];
+  String userId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    getUserId();
+    subscribeToMessages();
+  }
+
+  Future<void> getUserId() async {
+    userId = (await Amplify.Auth.getCurrentUser()).userId;
+    setState(() {});
+  }
+
+  void subscribeToMessages() {
+    Amplify.API.subscribe(
+      GraphQLRequest<String>(
+        document: '''
+          subscription OnCreateMessage($roomId: ID!) {
+            onCreateMessage(roomId: $roomId) { id content userId }
+          }
+        ''',
+        variables: {'roomId': widget.room['id']},
+      ),
+      onEstablished: () => print("Subscription established"),
+    ).listen((event) {
+      setState(() => messages.add(event.data));
+    });
+  }
+
+  Future<void> sendMessage() async {
+    await Amplify.API.mutate(
+      request: GraphQLRequest<String>(
+        document: '''
+          mutation SendMessage($roomId: ID!, $userId: String!, $content: String!) {
+            sendMessage(roomId: $roomId, userId: $userId, content: $content) { id }
+          }
+        ''',
+        variables: {
+          'roomId': widget.room['id'],
+          'userId': userId,
+          'content': message,
+        },
+      ),
+    ).response;
+    setState(() => message = '');
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    await Amplify.API.mutate(
+      request: GraphQLRequest<String>(
+        document: '''
+          mutation DeleteMessage($roomId: ID!, $messageId: ID!, $creatorId: String!) {
+            deleteMessage(roomId: $roomId, messageId: $messageId, creatorId: $creatorId)
+          }
+        ''',
+        variables: {
+          'roomId': widget.room['id'],
+          'messageId': messageId,
+          'creatorId': userId,
+        },
+      ),
+    ).response;
+  }
+
+  Future<void> bootUser(String targetUserId) async {
+    await Amplify.API.mutate(
+      request: GraphQLRequest<String>(
+        document: '''
+          mutation BootUser($roomId: ID!, $userId: String!, $creatorId: String!) {
+            bootUser(roomId: $roomId, userId: $userId, creatorId: $creatorId)
+          }
+        ''',
+        variables: {
+          'roomId': widget.room['id'],
+          'userId': targetUserId,
+          'creatorId': userId,
+        },
+      ),
+    ).response;
+  }
+
+  Future<void> blockUser(String targetUserId) async {
+    await Amplify.API.mutate(
+      request: GraphQLRequest<String>(
+        document: '''
+          mutation BlockUser($roomId: ID!, $userId: String!, $creatorId: String!) {
+            blockUser(roomId: $roomId, userId: $userId, creatorId: $creatorId)
+          }
+        ''',
+        variables: {
+          'roomId': widget.room['id'],
+          'userId': targetUserId,
+          'creatorId': userId,
+        },
+      ),
+    ).response;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.room['name'])),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                final msg = messages[index];
+                final isCreator = userId == widget.room['creatorId'];
+                return ListTile(
+                  title: Text(msg['content']),
+                  trailing: isCreator && msg['userId'] != userId
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.delete),
+                              onPressed: () => deleteMessage(msg['id']),
+                            ),
+                            PopupMenuButton(
+                              itemBuilder: (context) => [
+                                PopupMenuItem(value: 'boot', child: Text("Boot User")),
+                                PopupMenuItem(value: 'block', child: Text("Block User")),
+                              ],
+                              onSelected: (value) {
+                                if (value == 'boot') bootUser(msg['userId']);
+                                if (value == 'block') blockUser(msg['userId']);
+                              },
+                            ),
+                          ],
+                        )
+                      : null,
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(labelText: "Message"),
+                    onChanged: (value) => message = value,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.send),
+                  onPressed: sendMessage,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+--- frontend/home_screen.dart ---
+import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+
+class HomeScreen extends StatefulWidget {
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List rooms = [];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchRooms();
+  }
+
+  Future<void> fetchRooms() async {
+    final response = await Amplify.API.query(
+      request: GraphQLRequest<String>(
+        document: '''
+          query ListChatRooms {
+            listChatRooms { items { id name description isNsfw password } }
+          }
+        ''',
+      ),
+    ).response;
+    setState(() => rooms = response.data['listChatRooms']['items']);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Sifter")),
+      body: ListView.builder(
+        itemCount: rooms.length,
+        itemBuilder: (context, index) {
+          final room = rooms[index];
+          return ListTile(
+            title: Text(room['name']),
+            subtitle: Text(room['isNsfw'] ? "21+ NSFW" : "General Audiences"),
+            onTap: () => Navigator.pushNamed(context, '/join-room', arguments: room),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.pushNamed(context, '/create-room'),
+        child: Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+--- frontend/profile_screen.dart ---
+import 'package:flutter/material.dart';
+import 'package:amplify_flutter/amplify_flutter.dart';
+
+class ProfileScreen extends StatefulWidget {
+  @override
+  _ProfileScreenState createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String username = '';
+  String email = '';
+
+  @override
+  void initState() {
+    super.initState();
+    fetchUserProfile();
+  }
+
+  Future<void> fetchUserProfile() async {
+    final attributes = await Amplify.Auth.fetchUserAttributes();
+    setState(() {
+      username = attributes.firstWhere((attr) => attr.userAttributeKey == 'preferred_username', orElse: () => AuthUserAttribute(userAttributeKey: 'preferred_username', value: 'Unknown')).value;
+      email = attributes.firstWhere((attr) => attr.userAttributeKey == 'email', orElse: () => AuthUserAttribute(userAttributeKey: 'email', value: 'Unknown')).value;
+    });
+  }
+
+  Future<void> updateProfile(String newUsername) async {
+    await Amplify.Auth.updateUserAttribute(
+      userAttributeKey: 'preferred_username',
+      value: newUsername,
+    );
+    fetchUserProfile();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Profile")),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text("Username: $username"),
+            Text("Email: $email"),
+            TextField(
+              decoration: InputDecoration(labelText: "New Username"),
+              onSubmitted: (value) => updateProfile(value),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pushNamed(context, '/settings'),
+              child: Text("Go to Settings"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+--- admin-panel/package.json ---
+{
+  "name": "sifter-admin",
+  "version": "1.0.0",
+  "dependencies": {
+    "aws-amplify": "^5.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.0.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  }
+}
+
+--- admin-panel/index.js ---
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { Amplify } from 'aws-amplify';
+import awsconfig from './aws-exports';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import Users from './pages/Users';
+import Rooms from './pages/Rooms';
+import Analytics from './pages/Analytics';
+
+Amplify.configure(awsconfig);
+
+ReactDOM.render(
+  <BrowserRouter>
+    <Routes>
+      <Route path="/users" element={<Users />} />
+      <Route path="/rooms" element={<Rooms />} />
+      <Route path="/analytics" element={<Analytics />} />
+    </Routes>
+  </BrowserRouter>,
+  document.getElementById('root')
+);
+
+--- admin-panel/Users.js ---
+import React, { useState, useEffect } from 'react';
+import { API, Auth } from 'aws-amplify';
+
+function Users() {
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  async function fetchUsers() {
+    const response = await API.graphql({
+      query: `
+        query ListUsers {
+          listUsers { items { id email } }
+        }
+      `,
+    });
+    setUsers(response.data.listUsers.items);
+  }
+
+  async function deleteUser(userId) {
+    await API.graphql({
+      query: `
+        mutation DeleteAccount($userId: String!) {
+          deleteAccount(userId: $userId)
+        }
+      `,
+      variables: { userId },
+    });
+    fetchUsers();
+  }
+
+  return (
+    <div>
+      <h1>User Management</h1>
+      <ul>
+        {users.map(user => (
+          <li key={user.id}>
+            {user.email}
+            <button onClick={() => deleteUser(user.id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default Users;
+
+--- admin-panel/Rooms.js ---
+import React, { useState, useEffect } from 'react';
+import { API } from 'aws-amplify';
+
+function Rooms() {
+  const [rooms, setRooms] = useState([]);
+
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  async function fetchRooms() {
+    const response = await API.graphql({
+      query: `
+        query ListChatRooms {
+          listChatRooms { items { id name creatorId isNsfw } }
+        }
+      `,
+    });
+    setRooms(response.data.listChatRooms.items);
+  }
+
+  async function deleteRoom(roomId) {
+    await API.graphql({
+      query: `
+        mutation DeleteChatRoom($roomId: ID!) {
+          deleteChatRoom(roomId: $roomId)
+        }
+      `,
+      variables: { roomId },
+    });
+    fetchRooms();
+  }
+
+  return (
+    <div>
+      <h1>Room Management</h1>
+      <ul>
+        {rooms.map(room => (
+          <li key={room.id}>
+            {room.name} (NSFW: {room.isNsfw ? 'Yes' : 'No'})
+            <button onClick={() => deleteRoom(room.id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default Rooms;
+
+--- admin-panel/Analytics.js ---
+import React, { useState, useEffect } from 'react';
+import { API } from 'aws-amplify';
+
+function Analytics() {
+  const [stats, setStats] = useState({ users: 0, rooms: 0 });
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  async function fetchStats() {
+    const userResponse = await API.graphql({
+      query: `
+        query ListUsers {
+          listUsers { items { id } }
+        }
+      `,
+    });
+    const roomResponse = await API.graphql({
+      query: `
+        query ListChatRooms {
+          listChatRooms { items { id } }
+        }
+      `,
+    });
+    setStats({
+      users: userResponse.data.listUsers.items.length,
+      rooms: roomResponse.data.listChatRooms.items.length,
+    });
+  }
+
+  return (
+    <div>
+      <h1>Analytics</h1>
+      <p>Active Users: {stats.users}</p>
+      <p>Active Rooms: {stats.rooms}</p>
+    </div>
+  );
+}
+
+export default Analytics;
+```
