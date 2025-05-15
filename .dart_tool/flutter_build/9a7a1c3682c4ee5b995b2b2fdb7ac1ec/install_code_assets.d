@@ -1,0 +1,1 @@
+ /Users/mr.macintosh/Downloads/sifter-v20-ios-ready/.dart_tool/flutter_build/9a7a1c3682c4ee5b995b2b2fdb7ac1ec/native_assets.json: 

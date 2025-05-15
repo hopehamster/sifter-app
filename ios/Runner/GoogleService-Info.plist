@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>262065166385-rfq5n3h827s5etg2f6q984co24hdv4d3.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.262065166385-rfq5n3h827s5etg2f6q984co24hdv4d3</string>
+	<key>API_KEY</key>
+	<string>AIzaSyAmXiddm0vXH1QCkt3q5FPNQ0GYXZKMeSc</string>
+	<key>GCM_SENDER_ID</key>
+	<string>262065166385</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.sifter.live</string>
+	<key>PROJECT_ID</key>
+	<string>sifter-v20</string>
+	<key>STORAGE_BUCKET</key>
+	<string>sifter-v20.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:262065166385:ios:32b4df6af810030228dd10</string>
+	<key>DATABASE_URL</key>
+	<string>https://sifter-v20-default-rtdb.firebaseio.com</string>
+</dict>
+</plist>

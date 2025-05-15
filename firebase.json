@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"ios":{"default":{"projectId":"sifter-v20","appId":"1:262065166385:ios:32b4df6af810030228dd10","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"sifter-v20","configurations":{"ios":"1:262065166385:ios:32b4df6af810030228dd10"}}}}}}

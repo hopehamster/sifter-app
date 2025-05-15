@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        "members": {
+          ".read": "auth != null",
+          ".write": "false"
+        },
+        "admins": {
+          ".read": "auth != null",
+          ".write": "false"
+        }
+      }
+    }
+  }
+}
