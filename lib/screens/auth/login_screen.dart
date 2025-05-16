@@ -1,54 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
-// import 'auth_service.dart';
-import 'package:provider/provider.dart';
-import 'package:sifter/providers/auth_provider.dart';
+import 'package:sifter/providers/riverpod/auth_provider.dart';
 import 'package:sifter/screens/auth/phone_auth.dart';
 import 'package:sifter/screens/bottomNav/bottom_nav.dart';
 import 'package:sifter/screens/auth/signup_screen.dart';
+import 'package:sifter/utils/error_handler.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isLogin = true;
-  String? _errorMessage;
+  String? _error;
 
-  Future<void> _submit() async {
+  Future<void> _signInWithEmailPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      _error = null;
     });
 
     try {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      if (_isLogin) {
-        await auth.login(_emailController.text, _passwordController.text);
-        Navigator.push(
-            context, MaterialPageRoute(builder: (context) => MainScreen()));
-      } else {
-        await auth.login(_emailController.text, _passwordController.text);
-        Navigator.push(
-            context, MaterialPageRoute(builder: (context) => MainScreen()));
-      }
+      await ref.read(authNotifierProvider.notifier).signInWithEmailPassword(
+            _emailController.text,
+            _passwordController.text,
+          );
+          
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const BottomNavScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _isLoading = false;
+        _error = _getErrorMessage(e);
+      });
     } catch (e) {
-      setState(() => _errorMessage = e.toString());
-      print('errror $e');
-    } catch (e) {
-      setState(() => _errorMessage = 'An unknown error occurred');
-      print('errror $e');
-    } finally {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _error = 'An unexpected error occurred. Please try again.';
+      });
+    }
+  }
+
+  String _getErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'user-not-found':
+        return 'No user found with this email.';
+      case 'wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'invalid-email':
+        return 'Invalid email format.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return e.message ?? 'An error occurred during authentication.';
     }
   }
 
@@ -61,6 +83,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch the auth state to handle automatic navigation on successful auth
+    ref.listen(authNotifierProvider, (previous, next) {
+      next.whenData((user) {
+        if (user != null) {
+          Navigator.pushReplacement(
+            context, 
+            MaterialPageRoute(builder: (context) => const BottomNavScreen())
+          );
+        }
+      });
+    });
+    
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -68,8 +102,14 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              Image.asset(
+                'assets/logo.png',
+                width: 100,
+                height: 100,
+              ),
+              const SizedBox(height: 24),
               Text(
-                _isLogin ? 'Welcome Back' : 'Create Account',
+                'Welcome Back',
                 style: GoogleFonts.poppins(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -77,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                _isLogin ? 'Login to your account' : 'Sign up to get started',
+                'Login to your account',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   color: Colors.grey,
@@ -129,10 +169,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                     ),
-                    if (_errorMessage != null) ...[
+                    if (_error != null) ...[
                       const SizedBox(height: 16),
                       Text(
-                        _errorMessage!,
+                        _error!,
                         style: const TextStyle(color: Colors.red),
                       ),
                     ],
@@ -141,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _submit,
+                        onPressed: _isLoading ? null : _signInWithEmailPassword,
                         style: ElevatedButton.styleFrom(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -152,7 +192,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 color: Colors.white,
                               )
                             : Text(
-                                _isLogin ? 'Login' : 'Sign Up',
+                                'Login',
                                 style: GoogleFonts.poppins(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -166,74 +206,75 @@ class _LoginScreenState extends State<LoginScreen> {
                         Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => SignupScreen()));
-                        // setState(() {
-                        //   // _isLogin = !_isLogin;
-                        //   _errorMessage = null;
-                        // });
+                                builder: (context) => const SignupScreen()));
                       },
-                      child: Text(
-                        _isLogin
-                            ? 'Don\'t have an account? Sign Up'
-                            : 'Already have an account? Login',
-                        // style: GoogleFonts.poppins(),
+                      child: const Text(
+                        'Don\'t have an account? Sign Up',
                       ),
                     ),
                   ],
                 ),
               ),
-              SizedBox(height: 10),
-              // ElevatedButton(
-              //   onPressed: () {
-              //     Navigator.push(
-              //       context,
-              //       MaterialPageRoute(builder: (_) => PhoneAuthScreen()),
-              //     );
-              //   },
-              //   child: Text('Sign In with Phone'),
-              // ),
-              // SizedBox(height: 10),
-              // Column(
-              //   mainAxisAlignment: MainAxisAlignment.center,
-              //   children: [
-              //     IconButton(
-              //       color: Colors.blue,
-              //       icon: Image.asset('assets/google.png', height: 30),
-              //       onPressed: () async {
-              //         try {
-              //           await Provider.of<AuthProvider>(context, listen: false)
-              //               .signInWithGoogle();
-              //           Navigator.pushReplacement(
-              //             context,
-              //             MaterialPageRoute(builder: (_) => MainScreen()),
-              //           );
-              //         } catch (e) {
-              //           setState(() => _errorMessage = e.toString());
-              //         }
-              //       },
-              //     ),
-              //     IconButton(
-              //       color: Colors.blue,
-              //       icon: Icon(
-              //         Icons.apple,
-              //         color: Colors.black,
-              //         size: 40,
-              //       ),
-              //       onPressed: () async {
-              //         try {
-              //           await Provider.of<AuthProvider>(context, listen: false)
-              //               .signInWithApple();
-              //           Navigator.pushReplacement(
-              //             context,
-              //             MaterialPageRoute(builder: (_) => MainScreen()),
-              //           );
-              //         } catch (e) {
-              //           setState(() => _errorMessage = e.toString());
-              //         }
-              //       },
-              //     ),
-              // ],
-              // ),
+              const SizedBox(height: 24),
+              // Social login options
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(child: Divider()),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('OR'),
+                  ),
+                  Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Google sign in button
+              OutlinedButton.icon(
+                onPressed: _isLoading ? null : () async {
+                  setState(() {
+                    _isLoading = true;
+                    _error = null;
+                  });
+                  try {
+                    await ref.read(authNotifierProvider.notifier).signInWithGoogle();
+                    if (!mounted) return;
+                    Navigator.pushReplacement(
+                      context, 
+                      MaterialPageRoute(builder: (_) => const BottomNavScreen())
+                    );
+                  } catch (e) {
+                    setState(() {
+                      _isLoading = false;
+                      _error = 'Google sign in failed. Please try again.';
+                    });
+                  }
+                },
+                icon: Image.asset('assets/google.png', height: 24),
+                label: const Text('Sign in with Google'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Phone sign in button
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+                  );
+                },
+                icon: const Icon(Icons.phone),
+                label: const Text('Sign in with Phone'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  minimumSize: const Size(double.infinity, 0),
+                ),
+              ),
             ],
           ),
         ),

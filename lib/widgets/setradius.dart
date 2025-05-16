@@ -1,141 +1,118 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:sifter/screens/chat/create_room_screen.dart';
-import '../services/location_service.dart';
-// import 'create_room_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SetRadiusScreen extends StatefulWidget {
+class SetRadiusScreen extends ConsumerStatefulWidget {
+  const SetRadiusScreen({Key? key}) : super(key: key);
+
   @override
-  _SetRadiusScreenState createState() => _SetRadiusScreenState();
+  ConsumerState<SetRadiusScreen> createState() => _SetRadiusScreenState();
 }
 
-class _SetRadiusScreenState extends State<SetRadiusScreen> {
-  LatLng? _currentPosition;
-  GoogleMapController? _mapController;
-  double _chatRadius = 200; // 200 meters (~2 city blocks)
-
-  @override
-  void initState() {
-    super.initState();
-    _getUserLocation();
-  }
-
-  Future<void> _getUserLocation() async {
-    bool locationEnabled = await LocationService.isLocationEnabled();
-    if (!locationEnabled) {
-      await LocationService.enableLocation();
-    }
-    final locationData = await LocationService().location.getLocation();
-    setState(() {
-      _currentPosition =
-          LatLng(locationData.latitude!, locationData.longitude!);
-    });
-  }
-
-  void _next() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CreateRoomScreen(
-          latitude: _currentPosition!.latitude,
-          longitude: _currentPosition!.longitude,
-          radius: _chatRadius,
-        ),
-      ),
-    );
-  }
-
+class _SetRadiusScreenState extends ConsumerState<SetRadiusScreen> {
+  double _radius = 5.0; // Default 5km radius
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Set Chat Radius')),
-      body: Column(
-        children: [
-          // Map Section
-          Expanded(
-            child: Container(
-              margin: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.2),
-                    spreadRadius: 2,
-                    blurRadius: 5,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: _currentPosition == null
-                    ? Center(child: CircularProgressIndicator())
-                    : GoogleMap(
-                        initialCameraPosition: CameraPosition(
-                          target: _currentPosition!,
-                          zoom: 15,
-                        ),
-                        onMapCreated: (controller) {
-                          _mapController = controller;
-                        },
-                        markers: {
-                          Marker(
-                            markerId: MarkerId('user_location'),
-                            position: _currentPosition!,
-                            infoWindow: InfoWindow(title: 'Your Location'),
-                          ),
-                        },
-                        circles: {
-                          Circle(
-                            circleId: CircleId('chat_radius'),
-                            center: _currentPosition!,
-                            radius: _chatRadius,
-                            fillColor: Color(0xFF2196F3).withOpacity(0.2),
-                            strokeColor: Color(0xFF2196F3),
-                            strokeWidth: 2,
-                          ),
-                        },
-                        myLocationEnabled: true,
-                      ),
+      appBar: AppBar(
+        title: const Text('Set Search Radius'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set Chat Search Radius',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-          // Radius Slider
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const SizedBox(height: 16),
+            const Text(
+              'Adjust the radius to find chats around your current location.',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Chat Radius: ${_chatRadius.toInt()} meters'),
-                Slider(
-                  value: _chatRadius,
-                  min: 50,
-                  max: 500,
-                  divisions: 9,
-                  label: '${_chatRadius.toInt()} m',
-                  onChanged: (value) {
-                    setState(() {
-                      _chatRadius = value;
-                    });
-                  },
+                Text(
+                  '${_radius.toStringAsFixed(1)} km',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
-          ),
-          Padding(
-            padding: EdgeInsets.all(16),
-            child: ElevatedButton(
-              onPressed: _next,
-              style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            Slider(
+              value: _radius,
+              min: 0.5,
+              max: 20.0,
+              divisions: 39,
+              label: '${_radius.toStringAsFixed(1)} km',
+              onChanged: (value) {
+                setState(() {
+                  _radius = value;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('0.5 km'),
+                const Text('20 km'),
+              ],
+            ),
+            const SizedBox(height: 48),
+            const Text(
+              'Location Based Features',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const ListTile(
+              leading: Icon(Icons.location_on, color: Colors.blue),
+              title: Text('Connect with people nearby'),
+              subtitle: Text('Find location-based chat rooms'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.public, color: Colors.blue),
+              title: Text('Discover local events'),
+              subtitle: Text('Join discussions happening around you'),
+            ),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () {
+                  // Handle the radius setting
+                  Navigator.pop(context, _radius);
+                },
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Apply',
+                  style: TextStyle(
+                    fontSize: 18,
+                  ),
                 ),
               ),
-              child: Text('Next', style: TextStyle(fontSize: 16)),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

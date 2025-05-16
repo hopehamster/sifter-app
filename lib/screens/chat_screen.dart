@@ -1,514 +1,527 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_functions/firebase_functions.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:giphy_get/giphy_get.dart';
 import 'package:link_preview_generator/link_preview_generator.dart';
-import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
 import '../services/chat_cache.dart';
 import '../widgets/audio_message.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
+import '../models/message.dart';
+import '../models/chat_room.dart';
+import '../models/user.dart';
+import '../services/chat_service.dart';
+import '../services/user_service.dart';
+import '../services/storage_service.dart';
+import '../widgets/message_bubble.dart';
+import '../widgets/typing_indicator.dart';
+import '../widgets/chat_input.dart';
 
-class ChatScreen extends StatefulWidget {
-  final String roomId;
-  ChatScreen({required this.roomId});
+final chatScreenProvider = StateNotifierProvider.family<ChatScreenNotifier, ChatScreenState, String>((ref, chatRoomId) {
+  return ChatScreenNotifier(
+    ref.read(chatServiceProvider),
+    ref.read(userServiceProvider),
+    ref.read(storageServiceProvider),
+    chatRoomId,
+  );
+});
 
-  @override
-  _ChatScreenState createState() => _ChatScreenState();
-}
+class ChatScreenState {
+  final List<Message> messages;
+  final bool isLoading;
+  final String? error;
+  final bool isTyping;
+  final Set<String> typingUsers;
+  final bool isRecording;
+  final bool isEmojiPickerVisible;
+  final String? recordingPath;
+  final bool isUploading;
+  final double uploadProgress;
 
-class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
-  final DatabaseReference _db = FirebaseDatabase.instance.ref();
-  final _controller = TextEditingController();
-  final _floatingReactions = <FloatingReaction>[];
-  final _youtubeControllers = <String, YoutubePlayerController>{};
-  final ScrollController _scrollController = ScrollController();
-  int _reactionCount = 0;
-  bool _isOnline = true;
-  Map<String, dynamic>? _roomData;
-  bool _isCreator = false;
-  bool _isActive = true;
-  bool _isRecording = false;
-  bool _isBanned = false;
+  ChatScreenState({
+    this.messages = const [],
+    this.isLoading = true,
+    this.error,
+    this.isTyping = false,
+    this.typingUsers = const {},
+    this.isRecording = false,
+    this.isEmojiPickerVisible = false,
+    this.recordingPath,
+    this.isUploading = false,
+    this.uploadProgress = 0.0,
+  });
 
-  @override
-  void initState() {
-    super.initState();
-    FirebaseMessaging.instance.subscribeToTopic('room_${widget.roomId}');
-    ChatCache.init();
-    _checkConnectivity();
-    _fetchRoomData();
-    _listenForBan();
-  }
-
-  Future<void> _fetchRoomData() async {
-    final snapshot = await _db.child('rooms/${widget.roomId}').get();
-    if (snapshot.exists) {
-      setState(() {
-        _roomData = Map<String, dynamic>.from(snapshot.value as Map);
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        _isCreator = authProvider.userId == _roomData?['creatorId'];
-        _isActive = _roomData?['isActive'] ?? false;
-      });
-    }
-    if (!_isActive) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('This chat is closed.')),
-      );
-    }
-  }
-
-  void _listenForBan() {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    _db.child('rooms/${widget.roomId}/bannedUsers/${authProvider.userId}').onValue.listen((event) {
-      if (event.snapshot.exists) {
-        setState(() {
-          _isBanned = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('You have been banned from this chat.')),
-        );
-        FirebaseMessaging.instance.sendMessage(
-          to: authProvider.userId,
-          data: {
-            'title': 'Banned from Chat',
-            'body': 'You have been banned from the chat: ${widget.roomId}',
-          },
-        );
-        Navigator.pop(context);
-      }
-    });
-  }
-
-  Future<void> _checkConnectivity() async {
-    // Placeholder for connectivity check
-    setState(() => _isOnline = true); // Assume online for now
-  }
-
-  Future<void> _sendMessage(String content, {String? audioUrl}) async {
-    if (!_isActive) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cannot send message: This chat is closed.')),
-      );
-      return;
-    }
-    if (_isBanned) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cannot send message: You have been banned.')),
-      );
-      return;
-    }
-
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final message = {
-      'content': content,
-      if (audioUrl != null) 'audioUrl': audioUrl,
-      'userId': authProvider.userId,
-      'createdAt': DateTime.now().toIso8601String(),
-    };
-    final batch = _db.batch();
-    final messageRef = _db.child('messages/${widget.roomId}').push();
-    batch.set(messageRef, message);
-    await batch.commit();
-    await ChatCache.cacheMessage(widget.roomId, message);
-    await FirebaseFunctions.instance.httpsCallable('sendNotification').call({
-      'roomId': widget.roomId,
-      'message': content.length > 20 ? content.substring(0, 20) + '...' : content,
-    });
-    _scrollToBottom();
-  }
-
-  Future<void> _closeChat() async {
-    await _db.child('rooms/${widget.roomId}/isActive').set(false);
-    await _db.child('messages/${widget.roomId}').remove();
-    setState(() {
-      _isActive = false;
-    });
-    Navigator.pop(context); // Return to previous screen
-  }
-
-  Future<void> _banUser(String userId) async {
-    await _db.child('rooms/${widget.roomId}/bannedUsers/$userId').set(true);
-    // Remove the user's messages
-    final snapshot = await _db.child('messages/${widget.roomId}').get();
-    if (snapshot.exists) {
-      final messages = Map<String, dynamic>.from(snapshot.value as Map);
-      final batch = _db.batch();
-      messages.forEach((messageId, message) {
-        if (message['userId'] == userId) {
-          batch.remove(_db.child('messages/${widget.roomId}/$messageId'));
-        }
-      });
-      await batch.commit();
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('User has been banned from the chat.')),
+  ChatScreenState copyWith({
+    List<Message>? messages,
+    bool? isLoading,
+    String? error,
+    bool? isTyping,
+    Set<String>? typingUsers,
+    bool? isRecording,
+    bool? isEmojiPickerVisible,
+    String? recordingPath,
+    bool? isUploading,
+    double? uploadProgress,
+  }) {
+    return ChatScreenState(
+      messages: messages ?? this.messages,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+      isTyping: isTyping ?? this.isTyping,
+      typingUsers: typingUsers ?? this.typingUsers,
+      isRecording: isRecording ?? this.isRecording,
+      isEmojiPickerVisible: isEmojiPickerVisible ?? this.isEmojiPickerVisible,
+      recordingPath: recordingPath ?? this.recordingPath,
+      isUploading: isUploading ?? this.isUploading,
+      uploadProgress: uploadProgress ?? this.uploadProgress,
     );
   }
+}
 
-  void _addFloatingReaction(String gifUrl) {
-    if (_reactionCount >= 2) return;
-    setState(() {
-      _reactionCount++;
-      final controller = AnimationController(vsync: this, duration: Duration(seconds: 3));
-      _floatingReactions.add(FloatingReaction(gifUrl: gifUrl, controller: controller));
-      controller.forward().then((_) {
-        setState(() {
-          _floatingReactions.removeWhere((r) => r.controller == controller);
-          _reactionCount--;
-          controller.dispose();
-          CachedNetworkImage.evictFromCache(gifUrl);
-        });
+class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
+  final ChatService _chatService;
+  final UserService _userService;
+  final StorageService _storageService;
+  final String _chatRoomId;
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final Record _audioRecorder = Record();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  Timer? _typingTimer;
+  Timer? _recordingTimer;
+  Duration _recordingDuration = Duration.zero;
+  StreamSubscription? _messagesSubscription;
+  StreamSubscription? _typingSubscription;
+
+  ChatScreenNotifier(
+    this._chatService,
+    this._userService,
+    this._storageService,
+    this._chatRoomId,
+  ) : super(ChatScreenState()) {
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      _messagesSubscription = _chatService
+          .streamMessages(_chatRoomId)
+          .listen((messages) {
+        state = state.copyWith(
+          messages: messages,
+          isLoading: false,
+        );
       });
+
+      _typingSubscription = _chatService
+          .streamTypingUsers(_chatRoomId)
+          .listen((typingUsers) {
+        state = state.copyWith(
+          typingUsers: typingUsers,
+        );
+      });
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString(),
+        isLoading: false,
+      );
+    }
+  }
+
+  Future<void> sendMessage(String content) async {
+    try {
+      await _chatService.sendMessage(
+        _chatRoomId,
+        content,
+        MessageType.text,
+      );
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
+  Future<void> sendImage(File file) async {
+    try {
+      final path = 'chat_images/${_chatRoomId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final downloadUrl = await _storageService.uploadFile(
+        file,
+        path,
+        metadata: {'contentType': 'image/jpeg'},
+      );
+      
+      await _chatService.sendMessage(
+        _chatRoomId,
+        downloadUrl,
+        MessageType.image,
+      );
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
+  Future<void> sendFile(File file) async {
+    try {
+      final path = 'chat_files/${_chatRoomId}/${DateTime.now().millisecondsSinceEpoch}';
+      final downloadUrl = await _storageService.uploadFile(
+        file,
+        path,
+        metadata: {'contentType': 'application/octet-stream'},
+      );
+      
+      await _chatService.sendMessage(
+        _chatRoomId,
+        downloadUrl,
+        MessageType.file,
+        metadata: {
+          'fileName': file.path.split('/').last,
+          'fileSize': file.lengthSync().toString(),
+        },
+      );
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
+  Future<void> sendAudio(File file) async {
+    try {
+      final path = 'chat_audio/${_chatRoomId}/${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final downloadUrl = await _storageService.uploadFile(
+        file,
+        path,
+        metadata: {'contentType': 'audio/m4a'},
+      );
+      
+      await _chatService.sendMessage(
+        _chatRoomId,
+        downloadUrl,
+        MessageType.audio,
+      );
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
+  Future<void> sendLocation(String location) async {
+    try {
+      await _chatService.sendMessage(
+        _chatRoomId,
+        location,
+        MessageType.location,
+      );
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
+  Future<void> sendContact(Map<String, dynamic> contact) async {
+    try {
+      await _chatService.sendMessage(
+        _chatRoomId,
+        contact['phone'],
+        MessageType.contact,
+        metadata: contact,
+      );
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
+  }
+
+  void setTyping(bool isTyping) {
+    _chatService.setTyping(_chatRoomId, isTyping);
+  }
+
+  void toggleEmojiPicker() {
+    state = state.copyWith(isEmojiPickerVisible: !state.isEmojiPickerVisible);
+  }
+
+  void onEmojiSelected(Emoji emoji) {
+    _messageController.text += emoji.emoji;
+  }
+
+  void onTypingChanged(String text) {
+    if (_typingTimer?.isActive ?? false) {
+      _typingTimer!.cancel();
+    }
+    _typingTimer = Timer(const Duration(milliseconds: 500), () {
+      state = state.copyWith(isTyping: text.isNotEmpty);
     });
+  }
+
+  void startRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        await _audioRecorder.start();
+        state = state.copyWith(isRecording: true);
+        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          _recordingDuration += const Duration(seconds: 1);
+        });
+      }
+    } catch (e) {
+      state = state.copyWith(error: 'Failed to start recording: $e');
+    }
+  }
+
+  Future<void> stopRecording() async {
+    try {
+      final path = await _audioRecorder.stop();
+      _recordingTimer?.cancel();
+      state = state.copyWith(
+        isRecording: false,
+        recordingPath: path,
+      );
+
+      if (path != null) {
+        await _chatService.sendMediaMessage(
+          _chatRoomId,
+          _userService.currentUserId,
+          path,
+          MessageType.audio,
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(error: 'Failed to stop recording: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _messagesSubscription?.cancel();
+    _typingSubscription?.cancel();
+    _messageController.dispose();
+    _scrollController.dispose();
+    _typingTimer?.cancel();
+    _recordingTimer?.cancel();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+}
+
+class ChatScreen extends ConsumerStatefulWidget {
+  final ChatRoom chatRoom;
+
+  const ChatScreen({
+    super.key,
+    required this.chatRoom,
+  });
+
+  @override
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  final ScrollController _scrollController = ScrollController();
+  bool _isVisible = true;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
     }
   }
 
-  String? _extractYoutubeId(String text) {
-    final regex = RegExp(r'(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)');
-    final match = regex.firstMatch(text);
-    return match?.group(1);
-  }
-
-  String? _extractUrl(String text) {
-    final regex = RegExp(r'(https?://[^\s]+)');
-    final match = regex.firstMatch(text);
-    return match?.group(0);
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_roomData == null) {
-      return Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    final state = ref.watch(chatScreenProvider(widget.chatRoom.id));
+    final notifier = ref.read(chatScreenProvider(widget.chatRoom.id).notifier);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_roomData!['name']),
-      ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              Expanded(
-                child: StreamBuilder(
-                  stream: _db.child('messages/${widget.roomId}').onValue,
-                  builder: (context, AsyncSnapshot<DatabaseEvent> snapshot) {
-                    if (!_isOnline) {
-                      return FutureBuilder(
-                        future: ChatCache.getCachedMessages(widget.roomId),
-                        builder: (context, AsyncSnapshot<List<Map<String, dynamic>>> cacheSnapshot) {
-                          if (!cacheSnapshot.hasData) {
-                            return Center(child: CircularProgressIndicator());
-                          }
-                          if (cacheSnapshot.hasError) {
-                            return Center(child: Text('Error loading cached messages: ${cacheSnapshot.error}'));
-                          }
-                          return _buildMessageList(cacheSnapshot.data!);
-                        },
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      return Center(child: Text('Error loading messages: ${snapshot.error}'));
-                    }
-                    if (!snapshot.hasData) {
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    final messages = Map<String, dynamic>.from(
-                        snapshot.data!.snapshot.value as Map? ?? {});
-                    final messageList = messages.entries
-                        .map((e) => {...e.value, 'id': e.key})
-                        .toList();
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-                    return _buildMessageList(messageList);
-                  },
-                ),
-              ),
-              _buildInputArea(),
-            ],
+        title: StreamBuilder<User>(
+          stream: ref.read(userServiceProvider).streamUser(
+            widget.chatRoom.participants.firstWhere(
+              (id) => id != ref.read(userServiceProvider).currentUserId,
+            ),
           ),
-          ..._floatingReactions.map(_buildFloatingReaction),
-        ],
-      ),
-      floatingActionButton: _isCreator
-          ? Padding(
-              padding: EdgeInsets.only(bottom: 16), // Add padding for better spacing
-              child: FloatingActionButton(
-                backgroundColor: Color(0xFF2196F3),
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    builder: (context) => Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ListTile(
-                          leading: Icon(Icons.close, color: Colors.red),
-                          title: Text('Close Chat'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: Text('Close Chat'),
-                                content: Text('Are you sure you want to close this chat? All messages will be deleted.'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: Text('Cancel'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      _closeChat();
-                                      Navigator.pop(context);
-                                    },
-                                    child: Text('Close'),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
+          builder: (context, snapshot) {
+            final user = snapshot.data;
+            return Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundImage: user?.photoUrl != null
+                      ? CachedNetworkImageProvider(user!.photoUrl!)
+                      : null,
+                  child: user?.photoUrl == null
+                      ? Text(user?.initials ?? '?')
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.chatRoom.displayName),
+                    if (user?.isOnline ?? false)
+                      const Text(
+                        'Online',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green,
                         ),
-                        ListTile(
-                          leading: Icon(Icons.block, color: Colors.red),
-                          title: Text('Manage Participants'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            // Placeholder for managing participants
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Manage participants feature coming soon!')),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                child: Icon(Icons.settings),
-              ),
-            )
-          : null,
-    );
-  }
-
-  Widget _buildMessageList(List<Map<String, dynamic>> messages) {
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: messages.length,
-      cacheExtent: 1000.0, // Optimize performance by limiting cached items
-      itemBuilder: (context, index) {
-        final message = messages[index];
-        return GestureDetector(
-          onLongPress: () {
-            if (_isCreator && message['userId'] != Provider.of<AuthProvider>(context, listen: false).userId) {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('Ban User'),
-                  content: Text('Ban this user from the chat? Their messages will be removed.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        _banUser(message['userId']);
-                        Navigator.pop(context);
-                      },
-                      child: Text('Ban'),
-                    ),
+                      ),
                   ],
                 ),
-              );
-            } else {
-              _showReactionPicker(context, message['id']);
-            }
+              ],
+            );
           },
-          child: _buildMessage(message),
-        );
-      },
-    );
-  }
-
-  Widget _buildMessage(Map<String, dynamic> message) {
-    final content = message['content'] ?? '';
-    final audioUrl = message['audioUrl'];
-    final gifUrl = message['gifUrl'];
-    final youtubeId = _extractYoutubeId(content);
-    final url = _extractUrl(content);
-
-    if (audioUrl != null) {
-      return AudioMessage(audioUrl: audioUrl);
-    } else if (gifUrl != null) {
-      return CachedNetworkImage(
-        imageUrl: gifUrl,
-        width: 100,
-        height: 100,
-        memCacheHeight: 50,
-        memCacheWidth: 50,
-        fadeInDuration: Duration(milliseconds: 200),
-      );
-    } else if (youtubeId != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          VisibilityDetector(
-            key: Key(youtubeId),
-            onVisibilityChanged: (info) {
-              if (info.visibleFraction == 0) {
-                _youtubeControllers[youtubeId]?.dispose();
-                _youtubeControllers.remove(youtubeId);
-              }
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.video_call),
+            onPressed: () {
+              // TODO: Implement video call
             },
-            child: YoutubePlayer(
-              controller: _youtubeControllers.putIfAbsent(
-                youtubeId,
-                () => YoutubePlayerController(
-                  initialVideoId: youtubeId,
-                  flags: YoutubePlayerFlags(autoPlay: false, mute: false),
+          ),
+          IconButton(
+            icon: const Icon(Icons.call),
+            onPressed: () {
+              // TODO: Implement voice call
+            },
+          ),
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'info',
+                child: Text('Chat Info'),
+              ),
+              const PopupMenuItem(
+                value: 'mute',
+                child: Text('Mute Notifications'),
+              ),
+              const PopupMenuItem(
+                value: 'clear',
+                child: Text('Clear Chat'),
+              ),
+              const PopupMenuItem(
+                value: 'block',
+                child: Text('Block User'),
+              ),
+            ],
+            onSelected: (value) {
+              // TODO: Handle menu actions
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (state.typingUsers.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Theme.of(context).cardColor,
+              child: Text(
+                '${state.typingUsers.length} ${state.typingUsers.length == 1 ? 'person' : 'people'} typing...',
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
                 ),
               ),
-              width: 300,
+            ),
+          Expanded(
+            child: VisibilityDetector(
+              key: Key(widget.chatRoom.id),
+              onVisibilityChanged: (info) {
+                setState(() => _isVisible = info.visibleFraction > 0);
+                if (_isVisible) {
+                  notifier.setTyping(false);
+                }
+              },
+              child: state.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : state.error != null
+                      ? Center(child: Text(state.error!))
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(8),
+                          itemCount: state.messages.length,
+                          itemBuilder: (context, index) {
+                            final message = state.messages[index];
+                            return MessageBubble(
+                              message: message,
+                              isMe: message.senderId ==
+                                  ref.read(userServiceProvider).currentUserId,
+                              onTap: () {
+                                // TODO: Handle message tap
+                              },
+                              onLongPress: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  builder: (context) => Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.reply),
+                                        title: const Text('Reply'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          // TODO: Implement reply
+                                        },
+                                      ),
+                                      ListTile(
+                                        leading: const Icon(Icons.copy),
+                                        title: const Text('Copy'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          // TODO: Implement copy
+                                        },
+                                      ),
+                                      ListTile(
+                                        leading: const Icon(Icons.edit),
+                                        title: const Text('Edit'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          // TODO: Implement edit
+                                        },
+                                      ),
+                                      ListTile(
+                                        leading: const Icon(Icons.delete),
+                                        title: const Text('Delete'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          // TODO: Implement delete
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
             ),
           ),
-          SizedBox(height: 8),
-          LinkPreview(
-            url: content,
-            previewHeight: 100,
-            borderRadius: 12,
-            boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 4)],
+          ChatInput(
+            onSendMessage: notifier.sendMessage,
+            onSendImage: notifier.sendImage,
+            onSendFile: notifier.sendFile,
+            onSendAudio: notifier.sendAudio,
+            onSendLocation: notifier.sendLocation,
+            onSendContact: notifier.sendContact,
+            isTyping: state.isTyping,
+            onTypingStarted: () => notifier.setTyping(true),
+            onTypingStopped: () => notifier.setTyping(false),
           ),
         ],
-      );
-    } else if (url != null) {
-      return LinkPreview(
-        url: url,
-        previewHeight: 100,
-        borderRadius: 12,
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 4)],
-      );
-    }
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-      padding: EdgeInsets.all(10),
-      width: MediaQuery.of(context).size.width * 0.9, // Responsive width
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Color(0xFF2196F3)),
-      ),
-      child: Text(content),
-    );
-  }
-
-  Widget _buildInputArea() {
-    return Padding(
-      padding: EdgeInsets.all(8),
-      child: Row(
-        children: [
-          Expanded(child: TextField(controller: _controller)),
-          IconButton(
-            icon: Icon(
-              _isRecording ? Icons.mic_off : Icons.mic,
-              color: _isRecording ? Colors.red : Color(0xFF2196F3),
-            ),
-            onPressed: () async {
-              if (_isRecording) return;
-              final audioFile = await AudioMessage.record(context, (recording) {
-                setState(() {
-                  _isRecording = recording;
-                });
-              });
-              if (audioFile != null) {
-                await _sendMessage('', audioUrl: audioFile);
-              }
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.gif),
-            onPressed: () async {
-              final gif = await GiphyGet.getGif(
-                context: context,
-                apiKey: 'YOUR_GIPHY_API_KEY',
-                lang: GiphyLanguage.english,
-                rating: GiphyRating.g,
-              );
-              if (gif != null) {
-                await _sendMessage('', audioUrl: null);
-                await _db.child('messages/${widget.roomId}').push().set({
-                  'gifUrl': gif.url,
-                  'userId': Provider.of<AuthProvider>(context, listen: false).userId,
-                  'createdAt': DateTime.now().toIso8601String(),
-                });
-                _addFloatingReaction(gif.url!);
-              }
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.send),
-            onPressed: () async {
-              if (_controller.text.isNotEmpty) {
-                await _sendMessage(_controller.text);
-                _controller.clear();
-              }
-            },
-          ),
-        ],
       ),
     );
   }
-
-  Widget _buildFloatingReaction(FloatingReaction reaction) {
-    final slideAnimation = Tween<Offset>(begin: Offset(0, 1), end: Offset(0, -1)).animate(reaction.controller);
-    final opacityAnimation = Tween<double>(begin: 1, end: 0).animate(reaction.controller);
-    final scaleAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(reaction.controller);
-
-    return Positioned(
-      bottom: 0,
-      left: MediaQuery.of(context).size.width * 0.4,
-      child: SlideTransition(
-        position: slideAnimation,
-        child: FadeTransition(
-          opacity: opacityAnimation,
-          child: ScaleTransition(
-            scale: scaleAnimation,
-            child: CachedNetworkImage(
-              imageUrl: reaction.gifUrl,
-              width: 50,
-              height: 50,
-              memCacheHeight: 50,
-              memCacheWidth: 50,
-              fadeInDuration: Duration(milliseconds: 200),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showReactionPicker(BuildContext context, String messageId) {
-    // Placeholder for reaction picker
-  }
-}
-
-class FloatingReaction {
-  final String gifUrl;
-  final AnimationController controller;
-
-  FloatingReaction({required this.gifUrl, required this.controller});
 }

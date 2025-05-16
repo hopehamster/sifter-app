@@ -1,350 +1,387 @@
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:sifter/screens/chat/chat_cache.dart';
-import 'package:sifter/widgets/audio_message.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:giphy_get/giphy_get.dart';
-import 'package:link_preview_generator/link_preview_generator.dart';
-import 'package:provider/provider.dart';
-import 'package:visibility_detector/visibility_detector.dart';
-import 'package:sifter/providers/auth_provider.dart' as s;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sifter/models/message.dart';
+import 'package:sifter/providers/app_providers.dart';
+import 'package:sifter/services/message_service.dart';
+import 'package:sifter/services/user_service.dart';
+import 'package:sifter/widgets/chat_bubble.dart';
+import 'package:sifter/widgets/chat_input.dart';
+import 'package:sifter/providers/riverpod/message_provider.dart';
+import 'package:sifter/providers/riverpod/room_provider.dart';
+import 'package:sifter/providers/riverpod/user_provider.dart';
+import 'package:intl/intl.dart';
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String roomId;
-  ChatScreen({required this.roomId});
+  
+  const ChatScreen({
+    Key? key,
+    required this.roomId,
+  }) : super(key: key);
 
   @override
-  _ChatScreenState createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
-  final DatabaseReference _db = FirebaseDatabase.instance.ref();
-  final _controller = TextEditingController();
-  final _floatingReactions = <FloatingReaction>[];
-  final _youtubeControllers = <String, YoutubePlayerController>{};
-  int _reactionCount = 0;
-  bool _isOnline = true;
-
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final MessageService _messageService = MessageService();
+  final UserService _userService = UserService();
+  
+  // Add state for reply functionality
+  Message? _replyToMessage;
+  bool _isLoadingMore = false;
+  bool _hasMoreMessages = true;
+  DocumentSnapshot? _lastMessageDoc;
+  static const int _messagesPerPage = 20;
+  
   @override
   void initState() {
     super.initState();
-    FirebaseMessaging.instance.subscribeToTopic('room_${widget.roomId}');
-    ChatCache.init();
-    _checkConnectivity();
+    _loadInitialMessages();
+    _scrollController.addListener(_scrollListener);
   }
-
-  Future<void> _checkConnectivity() async {
-    // Placeholder for connectivity check
-    setState(() => _isOnline = true); // Assume online for now
+  
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
+    super.dispose();
   }
-
-  // Future<void> _sendMessage(String content, {String? audioUrl}) async {
-  //   final authProvider = Provider.of<s.AuthProvider>(context, listen: false);
-  //   final message = {
-  //     'content': content,
-  //     if (audioUrl != null) 'audioUrl': audioUrl,
-  //     'userId': authProvider.userId,
-  //     'createdAt': DateTime.now().toIso8601String(),
-  //   };
-  //   final batch = _db.batch();
-  //   final messageRef = _db.child('messages/${widget.roomId}').push();
-  //   batch.set(messageRef, message);
-  //   await batch.commit();
-  //   await ChatCache.cacheMessage(widget.roomId, message);
-  //   await FirebaseFunctions.instance.httpsCallable('sendNotification').call({
-  //     'roomId': widget.roomId,
-  //     'message':
-  //         content.length > 20 ? content.substring(0, 20) + '...' : content,
-  //   });
-  // }
-  Future<void> _sendMessage(String content, {String? audioUrl}) async {
-    final authProvider = Provider.of<s.AuthProvider>(context, listen: false);
-    final message = {
-      'content': content,
-      if (audioUrl != null) 'audioUrl': audioUrl,
-      'userId': authProvider.userId,
-      'createdAt': DateTime.now().toIso8601String(),
-    };
-
-    // Use push() to generate a new message reference
-    final messageRef = _db.child('messages/${widget.roomId}').push();
-
-    // Directly set the message without using a batch
-    await messageRef.set(message);
-
-    // Optional: cache locally
-    await ChatCache.cacheMessage(widget.roomId, message);
-
-    // Trigger Firebase Function for notifications
-    await FirebaseFunctions.instance.httpsCallable('sendNotification').call({
-      'roomId': widget.roomId,
-      'message':
-          content.length > 20 ? content.substring(0, 20) + '...' : content,
-    });
-  }
-
-  void _addFloatingReaction(String gifUrl) {
-    if (_reactionCount >= 2) return;
-    setState(() {
-      _reactionCount++;
-      final controller =
-          AnimationController(vsync: this, duration: Duration(seconds: 3));
-      _floatingReactions
-          .add(FloatingReaction(gifUrl: gifUrl, controller: controller));
-      controller.forward().then((_) {
+  
+  Future<void> _loadInitialMessages() async {
+    try {
+      final querySnapshot = await _messageService.getInitialMessages(widget.roomId, _messagesPerPage);
+      if (mounted) {
         setState(() {
-          _floatingReactions.removeWhere((r) => r.controller == controller);
-          _reactionCount--;
-          controller.dispose();
-          CachedNetworkImage.evictFromCache(gifUrl);
+          if (querySnapshot.docs.isNotEmpty) {
+            _lastMessageDoc = querySnapshot.docs.last;
+          }
+          _hasMoreMessages = querySnapshot.docs.length >= _messagesPerPage;
         });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading messages: $e')),
+        );
+      }
+    }
+  }
+  
+  Future<void> _loadMoreMessages() async {
+    if (!_hasMoreMessages || _isLoadingMore || _lastMessageDoc == null) return;
+    
+    setState(() {
+      _isLoadingMore = true;
+    });
+    
+    try {
+      final querySnapshot = await _messageService.getMoreMessages(
+        widget.roomId,
+        _lastMessageDoc!,
+        _messagesPerPage,
+      );
+      
+      if (mounted) {
+        setState(() {
+          if (querySnapshot.docs.isNotEmpty) {
+            _lastMessageDoc = querySnapshot.docs.last;
+          }
+          _hasMoreMessages = querySnapshot.docs.length >= _messagesPerPage;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading more messages: $e')),
+        );
+      }
+    }
+  }
+  
+  void _scrollListener() {
+    if (_scrollController.offset >= _scrollController.position.maxScrollExtent - 200 &&
+        !_scrollController.position.outOfRange) {
+      _loadMoreMessages();
+    }
+  }
+  
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+  
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+    
+    final currentUser = ref.read(userNotifierProvider).value;
+    if (currentUser == null) return;
+    
+    try {
+      _messageController.clear();
+      
+      // This will trigger a state update through the stream listener
+      await ref.read(roomMessagesNotifierProvider(widget.roomId).notifier)
+          .sendTextMessage(
+        widget.roomId,
+        text,
+        currentUser.id,
+      );
+      
+      // Scroll to bottom after sending
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
       });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send message: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  
+  void _handleReplyToMessage(Message message) {
+    setState(() {
+      _replyToMessage = message;
+    });
+  }
+  
+  void _cancelReply() {
+    setState(() {
+      _replyToMessage = null;
     });
   }
 
-  String? _extractYoutubeId(String text) {
-    final regex = RegExp(r'(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)');
-    final match = regex.firstMatch(text);
-    return match?.group(1);
+  void _handleSendImage(File file) async {
+    final currentUser = ref.read(userNotifierProvider).value;
+    if (currentUser == null) return;
+    
+    try {
+      await _messageService.sendImageMessage(
+        roomId: widget.roomId,
+        senderId: currentUser.id,
+        imageFile: file,
+        replyToMessageId: _replyToMessage?.id,
+      );
+      _cancelReply();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending image: $e')),
+        );
+      }
+    }
   }
 
-  String? _extractUrl(String text) {
-    final regex = RegExp(r'(https?://[^\s]+)');
-    final match = regex.firstMatch(text);
-    return match?.group(0);
+  void _handleSendFile(File file) async {
+    final currentUser = ref.read(userNotifierProvider).value;
+    if (currentUser == null) return;
+    
+    try {
+      await _messageService.sendFileMessage(
+        roomId: widget.roomId,
+        senderId: currentUser.id,
+        file: file,
+        replyToMessageId: _replyToMessage?.id,
+      );
+      _cancelReply();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending file: $e')),
+        );
+      }
+    }
   }
 
+  void _handleSendAudio(File file) async {
+    // Implementation would go here
+  }
+
+  void _handleSendLocation(String location) async {
+    // Implementation would go here
+  }
+
+  void _handleSendContact(Map<String, dynamic> contact) async {
+    // Implementation would go here
+  }
+  
   @override
   Widget build(BuildContext context) {
+    final roomAsync = ref.watch(roomProvider(widget.roomId));
+    final messagesAsync = ref.watch(roomMessagesNotifierProvider(widget.roomId));
+    final currentUserAsync = ref.watch(userNotifierProvider);
+    
     return Scaffold(
-      appBar: AppBar(title: Text('Chat Room')),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              Expanded(
-                child: StreamBuilder(
-                  stream: _db.child('messages/${widget.roomId}').onValue,
-                  builder: (context, AsyncSnapshot<DatabaseEvent> snapshot) {
-                    if (!_isOnline) {
-                      return FutureBuilder<List<dynamic>>(
-                        future: ChatCache.getCachedMessages(widget.roomId),
-                        builder: (context, cacheSnapshot) {
-                          if (!cacheSnapshot.hasData)
-                            return Center(child: CircularProgressIndicator());
-                          final messagesMap = snapshot.data!.snapshot.value
-                              as Map<dynamic, dynamic>;
-                          final messages = messagesMap.values
-                              .map((e) => Map<String, dynamic>.from(e))
-                              .toList();
-                          return _buildMessageList(messages);
-                        },
-                      );
-                    }
-                    if (!snapshot.hasData)
-                      return Center(child: CircularProgressIndicator());
-                    final rawData = snapshot.data!.snapshot.value;
-                    if (rawData == null || rawData is! Map) {
-                      return const Center(child: Text("No messages found"));
-                    }
-
-                    final messagesMap =
-                        Map<String, dynamic>.from(rawData as Map);
-                    final messages = messagesMap.entries.map((entry) {
-                      final message =
-                          Map<String, dynamic>.from(entry.value as Map);
-                      message['id'] =
-                          entry.key; // optionally keep the message ID
-                      return message;
-                    }).toList();
-
-                    return _buildMessageList(messages);
-                  },
-                ),
-              ),
-              _buildInputArea(),
-            ],
-          ),
-          ..._floatingReactions.map(_buildFloatingReaction),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageList(List<Map<String, dynamic>> messages) {
-    return ListView.builder(
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final message = messages[index];
-        return GestureDetector(
-          onLongPress: () => _showReactionPicker(context, message['id']),
-          child: _buildMessage(message),
-        );
-      },
-    );
-  }
-
-  Widget _buildMessage(Map<String, dynamic> message) {
-    final content = message['content'] ?? '';
-    final audioUrl = message['audioUrl'];
-    final gifUrl = message['gifUrl'];
-    final youtubeId = _extractYoutubeId(content);
-    final url = _extractUrl(content);
-
-    if (audioUrl != null) {
-      return AudioMessage(audioUrl: audioUrl);
-    } else if (gifUrl != null) {
-      return CachedNetworkImage(
-        imageUrl: gifUrl,
-        width: 100,
-        height: 100,
-        memCacheHeight: 50,
-        memCacheWidth: 50,
-        fadeInDuration: Duration(milliseconds: 200),
-      );
-    } else if (youtubeId != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          VisibilityDetector(
-            key: Key(youtubeId),
-            onVisibilityChanged: (info) {
-              if (info.visibleFraction == 0) {
-                _youtubeControllers[youtubeId]?.dispose();
-                _youtubeControllers.remove(youtubeId);
-              }
-            },
-            child: YoutubePlayer(
-              controller: _youtubeControllers.putIfAbsent(
-                youtubeId,
-                () => YoutubePlayerController(
-                  initialVideoId: youtubeId,
-                  flags: YoutubePlayerFlags(autoPlay: false, mute: false),
-                ),
-              ),
-              width: 300,
-            ),
-          ),
-          SizedBox(height: 8),
-          LinkPreviewGenerator(link: content)
-          // LinkPreview(
-          //       url: content,
-          //       previewHeight: 100,
-          //       borderRadius: 12,
-          //       boxShadow: [
-          //         BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 4)
-          //       ],
-          //     ),
-        ],
-      );
-    } else if (url != null) {
-      return LinkPreviewGenerator(link: content);
-    }
-    return Container(
-      margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-      padding: EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Color(0xFF2196F3)),
-      ),
-      child: Text(content),
-    );
-  }
-
-  Widget _buildInputArea() {
-    return Padding(
-      padding: EdgeInsets.all(8),
-      child: Row(
-        children: [
-          Expanded(child: TextField(controller: _controller)),
+      appBar: AppBar(
+        title: roomAsync.when(
+          data: (room) => Text(room.name),
+          loading: () => const Text('Loading...'),
+          error: (_, __) => const Text('Chat'),
+        ),
+        actions: [
           IconButton(
-            icon: Icon(Icons.mic, color: Color(0xFF2196F3)),
-            onPressed: () async {
-              final audioFile = await AudioMessage.record();
-              if (audioFile != null) {
-                await _sendMessage('', audioUrl: audioFile);
-              }
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              // Show room info
             },
           ),
-          IconButton(
-            icon: Icon(Icons.gif),
-            onPressed: () async {
-              final gif = await GiphyGet.getGif(
-                context: context,
-                apiKey: 'YOUR_GIPHY_API_KEY',
-                lang: GiphyLanguage.english,
-                rating: GiphyRating.g,
-              );
-              if (gif != null) {
-                await _sendMessage('', audioUrl: null);
-                await _db.child('messages/${widget.roomId}').push().set({
-                  'gifUrl': gif.url,
-                  'userId': Provider.of<s.AuthProvider>(context, listen: false)
-                      .userId,
-                  'createdAt': DateTime.now().toIso8601String(),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: messagesAsync.when(
+              data: (messages) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _scrollToBottom();
                 });
-                _addFloatingReaction(gif.url!);
-              }
-            },
+                
+                if (messages.isEmpty) {
+                  return const Center(
+                    child: Text('No messages yet. Start a conversation!'),
+                  );
+                }
+                
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
+                    final isCurrentUser = currentUserAsync.value?.id == message.senderId;
+                    
+                    return _buildMessageItem(message, isCurrentUser);
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text('Error loading messages: $error'),
+                  ],
+                ),
+              ),
+            ),
           ),
-          IconButton(
-            icon: Icon(Icons.send),
-            onPressed: () async {
-              if (_controller.text.isNotEmpty) {
-                await _sendMessage(_controller.text);
-                _controller.clear();
-              }
-            },
-          ),
+          _buildMessageInput(),
         ],
       ),
     );
   }
-
-  Widget _buildFloatingReaction(FloatingReaction reaction) {
-    final slideAnimation =
-        Tween<Offset>(begin: Offset(0, 1), end: Offset(0, -1))
-            .animate(reaction.controller);
-    final opacityAnimation =
-        Tween<double>(begin: 1, end: 0).animate(reaction.controller);
-    final scaleAnimation =
-        Tween<double>(begin: 0.8, end: 1.2).animate(reaction.controller);
-
-    return Positioned(
-      bottom: 0,
-      left: MediaQuery.of(context).size.width * 0.4,
-      child: SlideTransition(
-        position: slideAnimation,
-        child: FadeTransition(
-          opacity: opacityAnimation,
-          child: ScaleTransition(
-            scale: scaleAnimation,
-            child: CachedNetworkImage(
-              imageUrl: reaction.gifUrl,
-              width: 50,
-              height: 50,
-              memCacheHeight: 50,
-              memCacheWidth: 50,
-              fadeInDuration: Duration(milliseconds: 200),
+  
+  Widget _buildMessageItem(Message message, bool isCurrentUser) {
+    return Align(
+      alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isCurrentUser ? Colors.blue[100] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(16),
+        ),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message.content,
+              style: const TextStyle(fontSize: 16),
             ),
-          ),
+            const SizedBox(height: 4),
+            Text(
+              _formatTimestamp(message.timestamp),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
-
-  void _showReactionPicker(BuildContext context, String messageId) {
-    // Placeholder for reaction picker
+  
+  Widget _buildMessageInput() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            offset: const Offset(0, -1),
+            blurRadius: 4,
+            color: Colors.black.withOpacity(0.1),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.attach_file),
+            onPressed: () {
+              // Handle file attachment
+            },
+          ),
+          Expanded(
+            child: TextField(
+              controller: _messageController,
+              decoration: const InputDecoration(
+                hintText: 'Type a message...',
+                border: InputBorder.none,
+              ),
+              minLines: 1,
+              maxLines: 5,
+              textCapitalization: TextCapitalization.sentences,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.send, color: Colors.blue),
+            onPressed: _sendMessage,
+          ),
+        ],
+      ),
+    );
   }
-}
-
-class FloatingReaction {
-  final String gifUrl;
-  final AnimationController controller;
-
-  FloatingReaction({required this.gifUrl, required this.controller});
+  
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(
+      timestamp.year,
+      timestamp.month,
+      timestamp.day,
+    );
+    
+    if (messageDate == today) {
+      return DateFormat.jm().format(timestamp); // 3:30 PM
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      return 'Yesterday, ${DateFormat.jm().format(timestamp)}';
+    } else {
+      return DateFormat.yMMMd().add_jm().format(timestamp); // Apr 27, 2023, 3:30 PM
+    }
+  }
 }

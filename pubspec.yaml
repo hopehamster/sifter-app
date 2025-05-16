@@ -3,18 +3,28 @@ description: A location-based chat app
 version: 1.0.0+1
 
 environment:
-  sdk: ">=2.18.0 <3.0.0"
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: ^3.13.0
-  firebase_auth: 
-  firebase_database:
-  # firebase_functions: ^4.4.0
-  cloud_functions:
-  firebase_storage: 
-  firebase_messaging: ^15.2.5
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  json_annotation: ^4.9.0
+  freezed_annotation: ^2.4.1
+  
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.15.3
+  firebase_database: ^10.3.8
+  cloud_functions: ^4.5.8
+  firebase_storage: ^11.5.6
+  firebase_messaging: ^14.7.9
+  firebase_analytics: ^10.8.0
+  firebase_crashlytics: ^3.4.9
+  
+  # UI and Utilities
   giphy_get: 3.6.1
   youtube_player_flutter: 9.1.1
   link_preview_generator:
@@ -23,9 +33,8 @@ dependencies:
   record: ^4.4.0
   audioplayers: ^5.0.0
   cached_network_image: ^3.2.0
-  visibility_detector: ^0.3.0
+  visibility_detector: ^0.4.0+2
   flutter_dotenv: ^5.0.0
-  provider: ^6.0.0
   location: ^4.4.0
   http: 1.1.0
   url_launcher: ^6.2.0
@@ -35,14 +44,68 @@ dependencies:
   flutter_animate: ^4.5.2
   google_mobile_ads: ^6.0.0
   google_maps_flutter: ^2.12.1
+  
+  # Additional Features
+  image_picker: ^1.0.7
+  file_picker: ^6.1.1
+  path_provider: ^2.1.2
+  sqflite: ^2.3.2
+  flutter_secure_storage: ^9.0.0
+  intl: ^0.19.0
+  flutter_local_notifications: ^16.3.0
+  flutter_native_splash: ^2.3.10
+  flutter_launcher_icons: ^0.13.1
+  flutter_markdown: ^0.6.18
+  emoji_picker_flutter: ^1.6.3
+  flutter_quill: ^9.2.6
+  flutter_chat_ui: ^1.6.10
+  flutter_chat_types: ^3.6.2
+  uuid: ^4.3.3
+  crypto: ^3.0.3
+  permission_handler: ^11.1.0
+  connectivity_plus: ^5.0.2
+  flutter_offline: ^2.0.0
+  flutter_cache_manager: ^3.3.1
+  
+  # Localization
+  flutter_localizations:
+    sdk: flutter
+  easy_localization: ^3.0.3
+  
+  # UI Components
+  flutter_rating_bar: ^4.0.1
+  flutter_survey: ^1.0.0
+  google_sign_in: ^5.0.0
+  path: ^1.8.0
+  cloud_firestore: ^4.0.0
+  provider: ^6.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^3.0.1
+  build_runner: ^2.4.8
+  json_serializable: ^6.7.1
+  freezed: ^2.4.6
+  mockito: ^5.4.4
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
+  riverpod_generator: ^2.3.9
+  # Testing
+  bloc_test: ^9.1.5
+  golden_toolkit: ^0.15.0
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true
+  generate: true
 
   assets:
     - assets/
+    - assets/translations/
+    - assets/icons/
+    - assets/images/
+    - assets/emojis/
+    - assets/animations/
   

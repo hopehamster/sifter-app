@@ -1,27 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:provider/provider.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import '../providers/auth_provider.dart';
+import '../providers/riverpod/auth_provider.dart';
+import '../utils/validation.dart';
 import 'chat_screen.dart';
 import 'chat_selection_screen.dart';
 
-class CreateRoomScreen extends StatefulWidget {
+class CreateRoomScreen extends ConsumerStatefulWidget {
   final double latitude;
   final double longitude;
   final double radius;
 
-  CreateRoomScreen({
+  const CreateRoomScreen({
+    super.key,
     required this.latitude,
     required this.longitude,
     required this.radius,
   });
 
   @override
-  _CreateRoomScreenState createState() => _CreateRoomScreenState();
+  ConsumerState<CreateRoomScreen> createState() => _CreateRoomScreenState();
 }
 
-class _CreateRoomScreenState extends State<CreateRoomScreen> {
+class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
   final _roomNameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -40,14 +42,17 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   }
 
   Future<void> _fetchChatCreationCount() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final snapshot = await _db.child('users/${authProvider.userId}/chatCreationCount').get();
+    final authState = ref.read(authProvider);
+    if (authState.user == null) return;
+
+    final snapshot =
+        await _db.child('users/${authState.user?.uid}/chatCreationCount').get();
     if (snapshot.exists) {
       setState(() {
         _chatCreationCount = snapshot.value as int;
       });
     } else {
-      await _db.child('users/${authProvider.userId}/chatCreationCount').set(0);
+      await _db.child('users/${authState.user?.uid}/chatCreationCount').set(0);
       setState(() {
         _chatCreationCount = 0;
       });
@@ -98,9 +103,12 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
 
   Future<void> _createRoom() async {
     final roomName = _roomNameController.text;
-    if (roomName.isEmpty) {
+    
+    // Validate the room name
+    final validationError = Validator.validateRoomName(roomName);
+    if (validationError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Room name cannot be empty.')),
+        SnackBar(content: Text(validationError)),
       );
       return;
     }
@@ -109,11 +117,11 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
       _isLoading = true;
     });
 
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final authState = ref.read(authProvider);
     try {
       // Increment chat creation count
       final newCount = _chatCreationCount + 1;
-      await _db.child('users/${authProvider.userId}/chatCreationCount').set(newCount);
+      await _db.child('users/${authState.user?.uid}/chatCreationCount').set(newCount);
       setState(() {
         _chatCreationCount = newCount;
       });
@@ -123,16 +131,27 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
         await _rewardedAd!.show(
           onUserEarnedReward: (ad, reward) {
             // Award 10 points for watching the ad
-            _db.child('users/${authProvider.userId}/points').set(ServerValue.increment(10));
+            _db.child('users/${authState.user?.uid}/points').set(ServerValue.increment(10));
           },
         );
+      }
+
+      // Validate password if provided
+      if (_passwordController.text.isNotEmpty && _passwordController.text.length < 4) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password must be at least 4 characters')),
+        );
+        return;
       }
 
       final roomId = _db.child('rooms').push().key!;
       await _db.child('rooms/$roomId').set({
         'name': roomName,
         'description': _descriptionController.text,
-        'creatorId': authProvider.userId,
+        'creatorId': authState.user?.uid,
         'createdAt': DateTime.now().toIso8601String(),
         'latitude': widget.latitude,
         'longitude': widget.longitude,
