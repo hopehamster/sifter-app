@@ -1,9 +1,25 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sifter/services/analytics_service.dart';
-import 'package:sifter/services/database_service.dart';
-import 'package:sifter/utils/error_handler.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sifter/services/analytics_service.dart';
+import 'package:sifter/utils/error_handler.dart';
+import 'package:sifter/services/mock_auth_service.dart';
+
+// Mock user class to replace Firebase User
+class User {
+  final String uid;
+  final String? email;
+  final String? displayName;
+  final String? photoURL;
+  final bool isAnonymous;
+
+  User({
+    required this.uid,
+    this.email,
+    this.displayName,
+    this.photoURL,
+    this.isAnonymous = false,
+  });
+}
 
 final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService();
@@ -14,13 +30,16 @@ class AuthService {
   factory AuthService() => _instance;
   AuthService._internal();
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final MockAuthService _mockAuth = MockAuthService();
   final AnalyticsService _analytics = AnalyticsService();
-  final DatabaseService _database = DatabaseService();
 
   // Auth state changes stream
-  Stream<User?> authStateChanges() => _auth.authStateChanges();
+  Stream<User?> authStateChanges() {
+    return _mockAuth.authStateChanges.listenable().map((userId) {
+      if (userId == null) return null;
+      return User(uid: userId);
+    });
+  }
   
   // Dispose stream subscription if needed
   void disposeAuthStateChanges() {
@@ -29,18 +48,28 @@ class AuthService {
 
   // Get current user
   Future<User?> getCurrentUser() async {
-    return _auth.currentUser;
+    final userId = _mockAuth.currentUserId;
+    if (userId == null) return null;
+    
+    final email = await _mockAuth.getCurrentUserEmail();
+    return User(
+      uid: userId,
+      email: email,
+    );
   }
 
   // Sign in with email and password
   Future<User> signInWithEmailPassword(String email, String password) async {
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
+      final userId = await _mockAuth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
       await _analytics.logLogin(method: 'email');
-      return userCredential.user!;
+      return User(
+        uid: userId,
+        email: email,
+      );
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Email sign in error');
       throw Exception('Failed to sign in: $e');
@@ -50,12 +79,15 @@ class AuthService {
   // Sign up with email and password
   Future<User> signUpWithEmailPassword(String email, String password) async {
     try {
-      final userCredential = await _auth.createUserWithEmailAndPassword(
+      final userId = await _mockAuth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
       await _analytics.logSignUp(method: 'email');
-      return userCredential.user!;
+      return User(
+        uid: userId,
+        email: email,
+      );
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Email sign up error');
       throw Exception('Failed to sign up: $e');
@@ -65,18 +97,20 @@ class AuthService {
   // Sign in with Google
   Future<User> signInWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) throw Exception('Google sign in aborted');
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+      // Mock implementation - in a real app, we'd use Google Sign In
+      final email = "google_${DateTime.now().millisecondsSinceEpoch}@example.com";
+      final userId = await _mockAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: "google_auth",
       );
-
-      final userCredential = await _auth.signInWithCredential(credential);
+      
       await _analytics.logLogin(method: 'google');
-      return userCredential.user!;
+      return User(
+        uid: userId,
+        email: email,
+        displayName: "Google User",
+        photoURL: "https://ui-avatars.com/api/?name=Google+User",
+      );
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Google sign in error');
       throw Exception('Failed to sign in with Google: $e');
@@ -86,10 +120,7 @@ class AuthService {
   // Sign out
   Future<void> signOut() async {
     try {
-      await Future.wait([
-        _auth.signOut(),
-        _googleSignIn.signOut(),
-      ]);
+      await _mockAuth.signOut();
       await _analytics.logEvent('user_signed_out');
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Sign out error');
@@ -100,7 +131,7 @@ class AuthService {
   // Reset password
   Future<void> sendPasswordResetEmail(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email);
+      // Mock implementation - just log the event
       await _analytics.logEvent('password_reset_requested', parameters: {
         'email': email,
       });
@@ -113,18 +144,7 @@ class AuthService {
   // Update password
   Future<void> updatePassword(String currentPassword, String newPassword) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('No user signed in');
-      
-      // Reauthenticate the user first
-      final credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: currentPassword,
-      );
-      await user.reauthenticateWithCredential(credential);
-      
-      // Update password
-      await user.updatePassword(newPassword);
+      // Mock implementation - just log the event
       await _analytics.logEvent('password_updated');
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Update password error');
@@ -135,18 +155,7 @@ class AuthService {
   // Update email
   Future<void> updateEmail(String newEmail, String password) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('No user signed in');
-      
-      // Reauthenticate the user first
-      final credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: password,
-      );
-      await user.reauthenticateWithCredential(credential);
-      
-      // Update email
-      await user.updateEmail(newEmail);
+      // Mock implementation - just log the event
       await _analytics.logEvent('email_updated', parameters: {
         'new_email': newEmail,
       });
@@ -159,23 +168,7 @@ class AuthService {
   // Delete account
   Future<void> deleteAccount(String password) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('No user signed in');
-      
-      // Reauthenticate the user first if they're not using OAuth
-      if (user.providerData.any((info) => info.providerId == 'password')) {
-        final credential = EmailAuthProvider.credential(
-          email: user.email!,
-          password: password,
-        );
-        await user.reauthenticateWithCredential(credential);
-      }
-      
-      // Delete user data from Firestore
-      await _database.deleteUser(user.uid);
-      
-      // Delete user authentication
-      await user.delete();
+      await _mockAuth.deleteAccount();
       await _analytics.logEvent('account_deleted');
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Delete account error');
@@ -186,11 +179,8 @@ class AuthService {
   // Get user token
   Future<String?> getToken() async {
     try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        return await user.getIdToken();
-      }
-      return null;
+      // Mock implementation - return user ID as token
+      return _mockAuth.currentUserId;
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Get token error');
       throw Exception('Failed to get token: $e');
@@ -199,40 +189,6 @@ class AuthService {
 
   // Check if user is anonymous
   bool isAnonymous() {
-    return _auth.currentUser?.isAnonymous ?? false;
-  }
-  
-  // Sign in with phone number
-  Future<void> verifyPhoneNumber({
-    required String phoneNumber,
-    required Function(PhoneAuthCredential) verificationCompleted,
-    required Function(FirebaseAuthException) verificationFailed,
-    required Function(String, int?) codeSent,
-    required Function(String) codeAutoRetrievalTimeout,
-  }) async {
-    try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        verificationCompleted: verificationCompleted,
-        verificationFailed: verificationFailed,
-        codeSent: codeSent,
-        codeAutoRetrievalTimeout: codeAutoRetrievalTimeout,
-      );
-    } catch (e, stack) {
-      ErrorHandler.logError(e, stack, message: 'Phone verification error');
-      throw Exception('Failed to verify phone number: $e');
-    }
-  }
-  
-  // Sign in with phone credential
-  Future<User> signInWithPhoneCredential(PhoneAuthCredential credential) async {
-    try {
-      final userCredential = await _auth.signInWithCredential(credential);
-      await _analytics.logLogin(method: 'phone');
-      return userCredential.user!;
-    } catch (e, stack) {
-      ErrorHandler.logError(e, stack, message: 'Phone sign in error');
-      throw Exception('Failed to sign in with phone: $e');
-    }
+    return false; // Mock implementation - all users are non-anonymous
   }
 } 
