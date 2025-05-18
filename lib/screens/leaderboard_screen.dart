@@ -80,7 +80,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: isCurrentUser ? Colors.blue.withOpacity(0.1) : null,
+        color: isCurrentUser ? Colors.blue.withAlpha(26) : null,
         borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
@@ -162,7 +162,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                     if (_currentUserRank != null) ...[
                       Container(
                         padding: const EdgeInsets.all(16),
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withAlpha(26),
                         child: Row(
                           children: [
                             const Icon(Icons.emoji_events, color: Colors.amber),

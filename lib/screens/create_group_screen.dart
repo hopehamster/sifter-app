@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:location/location.dart';
-import '../models/chat_room.dart';
 import '../services/chat_service.dart';
 import '../services/points_service.dart';
+import '../models/chat_room.dart';
 
 class CreateGroupScreen extends ConsumerStatefulWidget {
   final String currentUserId;
+  final double latitude;
+  final double longitude;
 
   const CreateGroupScreen({
     super.key,
     required this.currentUserId,
+    required this.latitude,
+    required this.longitude,
   });
 
   @override
@@ -25,32 +28,11 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   bool _isPasswordProtected = false;
   bool _isPrivate = false;
   double _radius = 10.0; // Default radius in kilometers
-  LocationData? _currentLocation;
   bool _isLoading = false;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    _getCurrentLocation();
-  }
-
-  Future<void> _getCurrentLocation() async {
-    try {
-      final location = Location();
-      final locationData = await location.getLocation();
-      setState(() => _currentLocation = locationData);
-    } catch (e) {
-      setState(() => _error = 'Failed to get location: $e');
-    }
-  }
-
   Future<void> _createGroup() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_currentLocation == null) {
-      setState(() => _error = 'Location is required to create a group');
-      return;
-    }
 
     setState(() {
       _isLoading = true;
@@ -66,17 +48,27 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
         memberIds: [widget.currentUserId],
         description: _descriptionController.text,
         isGroup: true,
+        type: ChatRoomType.group,
+        createdBy: widget.currentUserId,
+        photoUrl: null,
+      );
+
+      // Add additional metadata as a separate update
+      await chatService.updateChatRoom(group.copyWith(
         metadata: {
           'location': {
-            'latitude': _currentLocation!.latitude,
-            'longitude': _currentLocation!.longitude,
+            'latitude': widget.latitude,
+            'longitude': widget.longitude,
           },
           'radius': _radius,
           'isPrivate': _isPrivate,
           'isPasswordProtected': _isPasswordProtected,
           if (_isPasswordProtected) 'password': _passwordController.text,
         },
-      );
+        isPrivate: _isPrivate,
+        isPasswordProtected: _isPasswordProtected,
+        password: _isPasswordProtected ? _passwordController.text : null,
+      ));
 
       // Reward points for creating a group
       await pointsService.rewardForGroupCreation(widget.currentUserId);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sifter/models/message.dart';
-import 'package:sifter/providers/message_provider.dart';
+import 'package:sifter/providers/riverpod/message_provider.dart';
 
 class ReactionWidget extends ConsumerWidget {
   final Message message;
@@ -37,7 +37,7 @@ class ReactionWidget extends ConsumerWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: hasUserReacted ? Colors.blue.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+              color: hasUserReacted ? Colors.blue.withAlpha(51) : Colors.grey.withAlpha(26),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -72,12 +72,12 @@ class ReactionWidget extends ConsumerWidget {
   }
 
   void _toggleReaction(String emoji, WidgetRef ref) {
-    final messageProvider = ref.read(messageProvider.notifier);
+    final messageNotifier = ref.read(roomMessagesNotifierProvider(message.roomId).notifier);
     
     if (message.hasUserReacted(currentUserId, emoji)) {
-      messageProvider.removeReaction(message.id, emoji, currentUserId);
+      messageNotifier.removeReaction(message.id, emoji, currentUserId);
     } else {
-      messageProvider.addReaction(message.id, emoji, currentUserId);
+      messageNotifier.addReaction(message.id, emoji, currentUserId);
     }
   }
 

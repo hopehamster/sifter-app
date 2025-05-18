@@ -1,0 +1,13 @@
+// Custom configuration to work around -G flag compilation issue
+OTHER_CFLAGS = -w -Wno-everything -Wno-format
+OTHER_CXXFLAGS = -w -Wno-everything -Wno-format
+
+// Special flags to disable the G flag issue
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) OPENSSL_NO_ASM=1 NO_OBSCURE_PRINTF=1 DEBUG=0
+
+// Disable all warnings
+WARNING_CFLAGS = -w -Wno-format -Wno-everything
+GCC_WARN_INHIBIT_ALL_WARNINGS = YES
+
+// Disable index store to avoid G flag
+COMPILER_INDEX_STORE_ENABLE = NO

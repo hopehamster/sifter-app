@@ -1,90 +1,100 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:sifter/utils/security.dart';
+import 'package:flutter/material.dart';
 
-/// Utility class for WhatsApp interactions without exposing phone numbers
+/// Utility class for WhatsApp integration
 class WhatsAppUtil {
-  /// Launches WhatsApp chat with pre-defined text message
-  /// Phone number is securely retrieved from storage
-  static Future<void> launchWhatsAppChat({
-    String? message,
-  }) async {
-    try {
-      // Get the securely stored phone number
-      final encryptedNumber = await SecurityUtils.getSecureData('support_whatsapp');
-      final phoneNumber = encryptedNumber ?? '1234567890'; // Fallback or default
-      
-      // Build the WhatsApp URL with optional text
-      String whatsappUrl = 'https://wa.me/$phoneNumber';
-      
-      // Add message text if provided
-      if (message != null && message.isNotEmpty) {
-        // URL encode the message
-        final encodedMessage = Uri.encodeComponent(message);
-        whatsappUrl += '?text=$encodedMessage';
-      }
-      
-      // Launch WhatsApp
-      if (await canLaunch(whatsappUrl)) {
-        await launch(whatsappUrl);
-      } else {
-        throw 'Could not launch WhatsApp';
-      }
-    } catch (e) {
-      debugPrint('Error launching WhatsApp: $e');
-    }
-  }
+  /// WhatsApp business number to contact support
+  static const String supportNumber = '12345678901'; // Replace with your actual WhatsApp support number
   
-  /// Creates a pre-filled support message with user info
+  /// Creates a support message with user details
   static String createSupportMessage({
     required String userId,
     required String username,
-    String? issueDescription,
+    String? appVersion,
+    String? deviceInfo,
+    String? problemDescription,
   }) {
+    final deviceDetails = deviceInfo ?? _getDeviceInfo();
+    final version = appVersion ?? _getAppVersion();
+    final problemDesc = problemDescription ?? 'I need help with the Sifter app.';
+    
     return '''
-Hello, I need support with the Sifter app.
+Hello Sifter Support,
 
-User ID: $userId
-Username: $username
-${issueDescription != null ? 'Issue: $issueDescription' : ''}
+$problemDesc
 
-Device info: ${_getDeviceInfo()}
-App version: ${_getAppVersion()}
-    '''.trim();
+User Details:
+- ID: $userId
+- Username: $username
+- $version
+- $deviceDetails
+
+Thank you!
+''';
   }
   
-  // Helper method to get device info
-  static String _getDeviceInfo() {
-    // In a real app, you would use a package like device_info_plus
-    // This is a placeholder
-    return 'Unknown device';
-  }
-  
-  // Helper method to get app version
-  static String _getAppVersion() {
-    // In a real app, you would use the package_info_plus package
-    // This is a placeholder
-    return '1.0.0';
-  }
-  
-  /// Creates a click-to-WhatsApp link for web
-  static Future<String> generateWhatsAppLink({
+  /// Launches WhatsApp with a pre-filled message
+  static Future<bool> launchWhatsAppChat({
+    String? phoneNumber,
     String? message,
   }) async {
-    // Get the securely stored phone number
-    final encryptedNumber = await SecurityUtils.getSecureData('support_whatsapp');
-    final phoneNumber = encryptedNumber ?? '1234567890'; // Fallback or default
+    final phone = phoneNumber ?? supportNumber;
+    final encodedMessage = Uri.encodeComponent(message ?? '');
     
-    // Build the WhatsApp URL with optional text
-    String whatsappUrl = 'https://wa.me/$phoneNumber';
-    
-    // Add message text if provided
-    if (message != null && message.isNotEmpty) {
-      // URL encode the message
-      final encodedMessage = Uri.encodeComponent(message);
-      whatsappUrl += '?text=$encodedMessage';
+    Uri whatsappUrl;
+    if (Platform.isIOS) {
+      whatsappUrl = Uri.parse('https://wa.me/$phone?text=$encodedMessage');
+    } else {
+      whatsappUrl = Uri.parse('whatsapp://send?phone=$phone&text=$encodedMessage');
     }
     
-    return whatsappUrl;
+    if (await canLaunchUrl(whatsappUrl)) {
+      return launchUrl(whatsappUrl);
+    } else {
+      // Fallback to web version if the app is not installed
+      final webUrl = Uri.parse('https://wa.me/$phone?text=$encodedMessage');
+      if (await canLaunchUrl(webUrl)) {
+        return launchUrl(webUrl);
+      } else {
+        throw 'Could not launch WhatsApp';
+      }
+    }
+  }
+  
+  /// Get basic device info string
+  static String _getDeviceInfo() {
+    return 'Device: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}';
+  }
+  
+  /// Get app version
+  static String _getAppVersion() {
+    // In a real app, you would use the package_info_plus package
+    return 'App version: 1.0.0';
+  }
+  
+  /// Show a dialog to confirm WhatsApp chat
+  static Future<bool> showWhatsAppConfirmDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Contact Support'),
+        content: const Text(
+          'Would you like to contact our support team via WhatsApp?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    
+    return result ?? false;
   }
 } 

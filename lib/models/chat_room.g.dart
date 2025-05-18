@@ -53,6 +53,22 @@ ChatRoom _$ChatRoomFromJson(Map<String, dynamic> json) => ChatRoom(
           : DateTime.parse(json['updatedAt'] as String),
       isGroup: json['isGroup'] as bool?,
       requireApproval: json['requireApproval'] as bool?,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      radius: (json['radius'] as num).toDouble(),
+      isActive: json['isActive'] as bool,
+      participantCount: (json['participantCount'] as num).toInt(),
+      expiresAt: json['expiresAt'] == null
+          ? null
+          : DateTime.parse(json['expiresAt'] as String),
+      lastActivityAt: json['lastActivityAt'] == null
+          ? null
+          : DateTime.parse(json['lastActivityAt'] as String),
+      isNsfw: json['isNsfw'] as bool,
+      rules: json['rules'] as String?,
+      themeColor: (json['themeColor'] as num).toInt(),
+      allowAnonymous: json['allowAnonymous'] as bool,
+      activityLog: json['activityLog'] as Map<String, dynamic>,
     );
 
 Map<String, dynamic> _$ChatRoomToJson(ChatRoom instance) => <String, dynamic>{
@@ -87,12 +103,26 @@ Map<String, dynamic> _$ChatRoomToJson(ChatRoom instance) => <String, dynamic>{
       'updatedAt': instance.updatedAt?.toIso8601String(),
       'isGroup': instance.isGroup,
       'requireApproval': instance.requireApproval,
+      'latitude': instance.latitude,
+      'longitude': instance.longitude,
+      'radius': instance.radius,
+      'isActive': instance.isActive,
+      'participantCount': instance.participantCount,
+      'expiresAt': instance.expiresAt?.toIso8601String(),
+      'lastActivityAt': instance.lastActivityAt?.toIso8601String(),
+      'isNsfw': instance.isNsfw,
+      'rules': instance.rules,
+      'themeColor': instance.themeColor,
+      'allowAnonymous': instance.allowAnonymous,
+      'activityLog': instance.activityLog,
     };
 
 const _$ChatRoomTypeEnumMap = {
   ChatRoomType.direct: 'direct',
   ChatRoomType.group: 'group',
   ChatRoomType.channel: 'channel',
+  ChatRoomType.public: 'public',
+  ChatRoomType.private: 'private',
 };
 
 const _$ChatRoomRoleEnumMap = {
@@ -161,6 +191,22 @@ _$ChatRoomImpl _$$ChatRoomImplFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['updatedAt'] as String),
       isGroup: json['isGroup'] as bool?,
       requireApproval: json['requireApproval'] as bool?,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      radius: (json['radius'] as num?)?.toDouble() ?? 5.0,
+      isActive: json['isActive'] as bool? ?? true,
+      participantCount: (json['participantCount'] as num?)?.toInt() ?? 0,
+      expiresAt: json['expiresAt'] == null
+          ? null
+          : DateTime.parse(json['expiresAt'] as String),
+      lastActivityAt: json['lastActivityAt'] == null
+          ? null
+          : DateTime.parse(json['lastActivityAt'] as String),
+      isNsfw: json['isNsfw'] as bool? ?? false,
+      rules: json['rules'] as String?,
+      themeColor: (json['themeColor'] as num?)?.toInt() ?? 0xFF2196F3,
+      allowAnonymous: json['allowAnonymous'] as bool? ?? false,
+      activityLog: json['activityLog'] as Map<String, dynamic>? ?? const {},
     );
 
 Map<String, dynamic> _$$ChatRoomImplToJson(_$ChatRoomImpl instance) =>
@@ -196,4 +242,16 @@ Map<String, dynamic> _$$ChatRoomImplToJson(_$ChatRoomImpl instance) =>
       'updatedAt': instance.updatedAt?.toIso8601String(),
       'isGroup': instance.isGroup,
       'requireApproval': instance.requireApproval,
+      'latitude': instance.latitude,
+      'longitude': instance.longitude,
+      'radius': instance.radius,
+      'isActive': instance.isActive,
+      'participantCount': instance.participantCount,
+      'expiresAt': instance.expiresAt?.toIso8601String(),
+      'lastActivityAt': instance.lastActivityAt?.toIso8601String(),
+      'isNsfw': instance.isNsfw,
+      'rules': instance.rules,
+      'themeColor': instance.themeColor,
+      'allowAnonymous': instance.allowAnonymous,
+      'activityLog': instance.activityLog,
     };

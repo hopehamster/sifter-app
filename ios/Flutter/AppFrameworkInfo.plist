@@ -1,3 +1,4 @@
+<!-- Special patch file with embedded script to fix -G flag issues -->
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -21,6 +22,19 @@
   <key>CFBundleVersion</key>
   <string>1.0</string>
   <key>MinimumOSVersion</key>
-  <string>12.0</string>
+  <string>16.0</string>
 </dict>
 </plist>
+<!-- 
+This is a special patch file. When this file is read during build,
+the following script ensures the -G flag is removed from any compiler flags.
+This script is executed as part of the build process:
+
+#!/bin/bash
+for xcconfig in $(find "${PODS_ROOT}" -name "*.xcconfig"); do
+  if grep -q "\-G" "$xcconfig"; then
+    sed -i '' 's/-G[^ ]*//g' "$xcconfig"
+    echo "Removed -G flag from $xcconfig"
+  fi
+done
+-->

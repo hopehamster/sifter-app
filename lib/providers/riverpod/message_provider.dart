@@ -1,7 +1,6 @@
 import 'dart:io';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:sifter/models/app_state.dart';
 import 'package:sifter/models/message.dart';
 import 'package:sifter/services/message_service.dart';
 import 'package:sifter/services/storage_service.dart';
@@ -13,21 +12,32 @@ part 'message_provider.g.dart';
 @riverpod
 class RoomMessagesNotifier extends _$RoomMessagesNotifier {
   late final MessageService _messageService;
-  late final StorageService _storageService;
+  StreamSubscription<QuerySnapshot>? _messagesSubscription;
   
   @override
   FutureOr<List<Message>> build(String roomId) {
     _messageService = ref.watch(messageServiceProvider);
-    _storageService = ref.watch(storageServiceProvider);
     
-    // Listen to messages for this room
-    _messageService.listenToRoomMessages(roomId, _onMessageUpdate);
+    // Set up listener for room messages
+    _setupMessagesListener(roomId);
     
     ref.onDispose(() {
-      _messageService.stopListeningToRoomMessages(roomId);
+      _messagesSubscription?.cancel();
     });
     
     return _fetchMessages(roomId);
+  }
+  
+  void _setupMessagesListener(String roomId) {
+    _messagesSubscription?.cancel();
+    
+    _messagesSubscription = _messageService.getMessages(roomId).listen((snapshot) {
+      final messages = snapshot.docs
+          .map((doc) => Message.fromFirestore(doc))
+          .toList();
+      
+      _onMessageUpdate(messages);
+    });
   }
   
   void _onMessageUpdate(List<Message> messages) {
@@ -36,7 +46,10 @@ class RoomMessagesNotifier extends _$RoomMessagesNotifier {
   
   Future<List<Message>> _fetchMessages(String roomId) async {
     try {
-      return await _messageService.getMessages(roomId);
+      final snapshot = await _messageService.getInitialMessages(roomId, 20);
+      return snapshot.docs
+          .map((doc) => Message.fromFirestore(doc))
+          .toList();
     } catch (e, stack) {
       ErrorHandler.logError(e, stack);
       throw Exception('Failed to fetch messages: ${e.toString()}');
@@ -46,18 +59,15 @@ class RoomMessagesNotifier extends _$RoomMessagesNotifier {
   // Send a text message
   Future<Message> sendTextMessage(String roomId, String content, String senderId) async {
     try {
-      final message = Message(
-        id: '',
-        roomId: roomId,
-        senderId: senderId,
-        content: content,
-        timestamp: DateTime.now(),
-        type: MessageType.text,
-        status: MessageStatus.sending,
+      final messageId = await _messageService.sendTextMessage(
+        roomId: roomId, 
+        senderId: senderId, 
+        text: content
       );
       
-      final savedMessage = await _messageService.sendMessage(message);
-      return savedMessage;
+      // Get the message document
+      final snapshot = await _messageService.getMessage(messageId);
+      return Message.fromFirestore(snapshot);
     } catch (e, stack) {
       ErrorHandler.logError(e, stack);
       throw Exception('Failed to send message: ${e.toString()}');
@@ -67,21 +77,15 @@ class RoomMessagesNotifier extends _$RoomMessagesNotifier {
   // Send an image message
   Future<Message> sendImageMessage(String roomId, File imageFile, String senderId) async {
     try {
-      // First upload the image
-      final imageUrl = await _storageService.uploadImage(imageFile, 'chat_images/$roomId');
-      
-      final message = Message(
-        id: '',
+      final messageId = await _messageService.sendImageMessage(
         roomId: roomId,
         senderId: senderId,
-        content: imageUrl,
-        timestamp: DateTime.now(),
-        type: MessageType.image,
-        status: MessageStatus.sending,
+        imageFile: imageFile
       );
       
-      final savedMessage = await _messageService.sendMessage(message);
-      return savedMessage;
+      // Get the message document
+      final snapshot = await _messageService.getMessage(messageId);
+      return Message.fromFirestore(snapshot);
     } catch (e, stack) {
       ErrorHandler.logError(e, stack);
       throw Exception('Failed to send image message: ${e.toString()}');
@@ -91,22 +95,15 @@ class RoomMessagesNotifier extends _$RoomMessagesNotifier {
   // Send a file message
   Future<Message> sendFileMessage(String roomId, File file, String fileName, String senderId) async {
     try {
-      // First upload the file
-      final fileUrl = await _storageService.uploadFile(file, 'chat_files/$roomId', fileName);
-      
-      final message = Message(
-        id: '',
+      final messageId = await _messageService.sendFileMessage(
         roomId: roomId,
         senderId: senderId,
-        content: fileUrl,
-        timestamp: DateTime.now(),
-        type: MessageType.file,
-        metadata: {'fileName': fileName},
-        status: MessageStatus.sending,
+        file: file
       );
       
-      final savedMessage = await _messageService.sendMessage(message);
-      return savedMessage;
+      // Get the message document
+      final snapshot = await _messageService.getMessage(messageId);
+      return Message.fromFirestore(snapshot);
     } catch (e, stack) {
       ErrorHandler.logError(e, stack);
       throw Exception('Failed to send file message: ${e.toString()}');
@@ -116,13 +113,7 @@ class RoomMessagesNotifier extends _$RoomMessagesNotifier {
   // Edit a message
   Future<void> editMessage(Message message, String newContent) async {
     try {
-      final updatedMessage = message.copyWith(
-        content: newContent,
-        isEdited: true,
-        lastEditTimestamp: DateTime.now(),
-      );
-      
-      await _messageService.updateMessage(updatedMessage);
+      await _messageService.editMessage(message.id, newContent);
       
       // The state will be updated via _onMessageUpdate listener
     } catch (e, stack) {
@@ -165,12 +156,40 @@ class RoomMessagesNotifier extends _$RoomMessagesNotifier {
   // Pin a message
   Future<void> pinMessage(String messageId, bool isPinned) async {
     try {
-      await _messageService.pinMessage(messageId, isPinned);
+      if (isPinned) {
+        await _messageService.pinMessage(messageId);
+      } else {
+        await _messageService.unpinMessage(messageId);
+      }
       
       // The state will be updated via _onMessageUpdate listener
     } catch (e, stack) {
       ErrorHandler.logError(e, stack);
       throw Exception('Failed to pin message: ${e.toString()}');
+    }
+  }
+
+  // Add a reaction to a message
+  Future<void> addReaction(String messageId, String emoji, String userId) async {
+    try {
+      await _messageService.addReaction(messageId, emoji, userId);
+      
+      // The state will be updated via _onMessageUpdate listener
+    } catch (e, stack) {
+      ErrorHandler.logError(e, stack);
+      throw Exception('Failed to add reaction: ${e.toString()}');
+    }
+  }
+  
+  // Remove a reaction from a message
+  Future<void> removeReaction(String messageId, String emoji, String userId) async {
+    try {
+      await _messageService.removeReaction(messageId, emoji, userId);
+      
+      // The state will be updated via _onMessageUpdate listener
+    } catch (e, stack) {
+      ErrorHandler.logError(e, stack);
+      throw Exception('Failed to remove reaction: ${e.toString()}');
     }
   }
 }

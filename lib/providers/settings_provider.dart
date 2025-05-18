@@ -1,8 +1,65 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sifter/services/analytics_service.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SettingsProvider with ChangeNotifier {
+part 'settings_provider.g.dart';
+
+class Settings {
+  final bool notificationsEnabled;
+  final bool soundEnabled;
+  final bool vibrationEnabled;
+  final bool readReceiptsEnabled;
+  final bool typingIndicatorEnabled;
+  final bool messagePreviewEnabled;
+  final bool autoPlayGifsEnabled;
+  final bool autoPlayVideosEnabled;
+  final bool saveMediaEnabled;
+  final bool dataSaverEnabled;
+
+  const Settings({
+    this.notificationsEnabled = true,
+    this.soundEnabled = true,
+    this.vibrationEnabled = true,
+    this.readReceiptsEnabled = true,
+    this.typingIndicatorEnabled = true,
+    this.messagePreviewEnabled = true,
+    this.autoPlayGifsEnabled = true,
+    this.autoPlayVideosEnabled = true,
+    this.saveMediaEnabled = true,
+    this.dataSaverEnabled = false,
+  });
+
+  Settings copyWith({
+    bool? notificationsEnabled,
+    bool? soundEnabled,
+    bool? vibrationEnabled,
+    bool? readReceiptsEnabled,
+    bool? typingIndicatorEnabled,
+    bool? messagePreviewEnabled,
+    bool? autoPlayGifsEnabled,
+    bool? autoPlayVideosEnabled,
+    bool? saveMediaEnabled,
+    bool? dataSaverEnabled,
+  }) {
+    return Settings(
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+      soundEnabled: soundEnabled ?? this.soundEnabled,
+      vibrationEnabled: vibrationEnabled ?? this.vibrationEnabled,
+      readReceiptsEnabled: readReceiptsEnabled ?? this.readReceiptsEnabled,
+      typingIndicatorEnabled: typingIndicatorEnabled ?? this.typingIndicatorEnabled,
+      messagePreviewEnabled: messagePreviewEnabled ?? this.messagePreviewEnabled,
+      autoPlayGifsEnabled: autoPlayGifsEnabled ?? this.autoPlayGifsEnabled,
+      autoPlayVideosEnabled: autoPlayVideosEnabled ?? this.autoPlayVideosEnabled,
+      saveMediaEnabled: saveMediaEnabled ?? this.saveMediaEnabled,
+      dataSaverEnabled: dataSaverEnabled ?? this.dataSaverEnabled,
+    );
+  }
+}
+
+@riverpod
+class SettingsNotifier extends _$SettingsNotifier {
   static const String _notificationsKey = 'notifications_enabled';
   static const String _soundKey = 'sound_enabled';
   static const String _vibrationKey = 'vibration_enabled';
@@ -15,146 +72,137 @@ class SettingsProvider with ChangeNotifier {
   static const String _dataSaverKey = 'data_saver_enabled';
   
   late SharedPreferences _prefs;
-  final AnalyticsService _analytics = AnalyticsService();
   
-  bool _notificationsEnabled = true;
-  bool _soundEnabled = true;
-  bool _vibrationEnabled = true;
-  bool _readReceiptsEnabled = true;
-  bool _typingIndicatorEnabled = true;
-  bool _messagePreviewEnabled = true;
-  bool _autoPlayGifsEnabled = true;
-  bool _autoPlayVideosEnabled = true;
-  bool _saveMediaEnabled = true;
-  bool _dataSaverEnabled = false;
-  
-  bool get notificationsEnabled => _notificationsEnabled;
-  bool get soundEnabled => _soundEnabled;
-  bool get vibrationEnabled => _vibrationEnabled;
-  bool get readReceiptsEnabled => _readReceiptsEnabled;
-  bool get typingIndicatorEnabled => _typingIndicatorEnabled;
-  bool get messagePreviewEnabled => _messagePreviewEnabled;
-  bool get autoPlayGifsEnabled => _autoPlayGifsEnabled;
-  bool get autoPlayVideosEnabled => _autoPlayVideosEnabled;
-  bool get saveMediaEnabled => _saveMediaEnabled;
-  bool get dataSaverEnabled => _dataSaverEnabled;
-  
-  SettingsProvider() {
+  @override
+  Settings build() {
     _loadSettings();
+    return const Settings();
   }
   
   Future<void> _loadSettings() async {
     _prefs = await SharedPreferences.getInstance();
-    _notificationsEnabled = _prefs.getBool(_notificationsKey) ?? true;
-    _soundEnabled = _prefs.getBool(_soundKey) ?? true;
-    _vibrationEnabled = _prefs.getBool(_vibrationKey) ?? true;
-    _readReceiptsEnabled = _prefs.getBool(_readReceiptsKey) ?? true;
-    _typingIndicatorEnabled = _prefs.getBool(_typingIndicatorKey) ?? true;
-    _messagePreviewEnabled = _prefs.getBool(_messagePreviewKey) ?? true;
-    _autoPlayGifsEnabled = _prefs.getBool(_autoPlayGifsKey) ?? true;
-    _autoPlayVideosEnabled = _prefs.getBool(_autoPlayVideosKey) ?? true;
-    _saveMediaEnabled = _prefs.getBool(_saveMediaKey) ?? true;
-    _dataSaverEnabled = _prefs.getBool(_dataSaverKey) ?? false;
-    notifyListeners();
+    final notificationsEnabled = _prefs.getBool(_notificationsKey) ?? true;
+    final soundEnabled = _prefs.getBool(_soundKey) ?? true;
+    final vibrationEnabled = _prefs.getBool(_vibrationKey) ?? true;
+    final readReceiptsEnabled = _prefs.getBool(_readReceiptsKey) ?? true;
+    final typingIndicatorEnabled = _prefs.getBool(_typingIndicatorKey) ?? true;
+    final messagePreviewEnabled = _prefs.getBool(_messagePreviewKey) ?? true;
+    final autoPlayGifsEnabled = _prefs.getBool(_autoPlayGifsKey) ?? true;
+    final autoPlayVideosEnabled = _prefs.getBool(_autoPlayVideosKey) ?? true;
+    final saveMediaEnabled = _prefs.getBool(_saveMediaKey) ?? true;
+    final dataSaverEnabled = _prefs.getBool(_dataSaverKey) ?? false;
+    
+    state = Settings(
+      notificationsEnabled: notificationsEnabled,
+      soundEnabled: soundEnabled,
+      vibrationEnabled: vibrationEnabled,
+      readReceiptsEnabled: readReceiptsEnabled,
+      typingIndicatorEnabled: typingIndicatorEnabled,
+      messagePreviewEnabled: messagePreviewEnabled,
+      autoPlayGifsEnabled: autoPlayGifsEnabled,
+      autoPlayVideosEnabled: autoPlayVideosEnabled,
+      saveMediaEnabled: saveMediaEnabled,
+      dataSaverEnabled: dataSaverEnabled,
+    );
   }
   
   Future<void> setNotificationsEnabled(bool value) async {
-    _notificationsEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_notificationsKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'notifications',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(notificationsEnabled: value);
   }
   
   Future<void> setSoundEnabled(bool value) async {
-    _soundEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_soundKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'sound',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(soundEnabled: value);
   }
   
   Future<void> setVibrationEnabled(bool value) async {
-    _vibrationEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_vibrationKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'vibration',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(vibrationEnabled: value);
   }
   
   Future<void> setReadReceiptsEnabled(bool value) async {
-    _readReceiptsEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_readReceiptsKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'read_receipts',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(readReceiptsEnabled: value);
   }
   
   Future<void> setTypingIndicatorEnabled(bool value) async {
-    _typingIndicatorEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_typingIndicatorKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'typing_indicator',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(typingIndicatorEnabled: value);
   }
   
   Future<void> setMessagePreviewEnabled(bool value) async {
-    _messagePreviewEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_messagePreviewKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'message_preview',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(messagePreviewEnabled: value);
   }
   
   Future<void> setAutoPlayGifsEnabled(bool value) async {
-    _autoPlayGifsEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_autoPlayGifsKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'auto_play_gifs',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(autoPlayGifsEnabled: value);
   }
   
   Future<void> setAutoPlayVideosEnabled(bool value) async {
-    _autoPlayVideosEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_autoPlayVideosKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'auto_play_videos',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(autoPlayVideosEnabled: value);
   }
   
   Future<void> setSaveMediaEnabled(bool value) async {
-    _saveMediaEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_saveMediaKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'save_media',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(saveMediaEnabled: value);
   }
   
   Future<void> setDataSaverEnabled(bool value) async {
-    _dataSaverEnabled = value;
+    final analytics = ref.read(analyticsServiceProvider);
     await _prefs.setBool(_dataSaverKey, value);
-    await _analytics.logEvent('setting_changed', parameters: {
+    await analytics.logEvent('setting_changed', parameters: {
       'setting': 'data_saver',
       'value': value,
     });
-    notifyListeners();
+    state = state.copyWith(dataSaverEnabled: value);
   }
 } 

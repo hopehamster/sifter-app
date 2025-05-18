@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'dart:ui';
 
 part 'chat_room.freezed.dart';
 part 'chat_room.g.dart';
@@ -7,6 +8,8 @@ enum ChatRoomType {
   direct,
   group,
   channel,
+  public,
+  private,
 }
 
 enum ChatRoomRole {
@@ -49,11 +52,28 @@ class ChatRoom with _$ChatRoom {
     DateTime? updatedAt,
     bool? isGroup,
     bool? requireApproval,
+    
+    // Location-based properties
+    required double latitude,
+    required double longitude,
+    @Default(5.0) double radius, // Default radius in km
+    @Default(true) bool isActive,
+    @Default(0) int participantCount,
+    
+    // New properties for expiration and customization
+    DateTime? expiresAt, // Auto-expiration timestamp (24 hours from creation/last activity)
+    DateTime? lastActivityAt, // Timestamp of last activity in the room
+    @Default(false) bool isNsfw, // Flag for NSFW content
+    String? rules, // Optional rules for the chat room
+    @Default(0xFF2196F3) int themeColor, // Theme color for the chat room UI (default blue)
+    @Default(false) bool allowAnonymous, // Whether to allow anonymous users to join
+    @Default({}) Map<String, dynamic> activityLog, // Log of user activity for engagement points
   }) = _ChatRoom;
 
   // Private constructor needed by Freezed for getter implementations
   const ChatRoom._();
 
+  // Use freezed-generated fromJson factory
   factory ChatRoom.fromJson(Map<String, dynamic> json) => _$ChatRoomFromJson(json);
 }
 
@@ -61,6 +81,8 @@ extension ChatRoomX on ChatRoom {
   bool isDirectChat() => type == ChatRoomType.direct;
   bool isGroupChat() => type == ChatRoomType.group;
   bool isChannel() => type == ChatRoomType.channel;
+  bool isPublicChat() => type == ChatRoomType.public;
+  bool isPrivateChat() => type == ChatRoomType.private;
   
   String getDisplayName(String currentUserId) {
     if (type == ChatRoomType.direct) {
@@ -130,6 +152,43 @@ extension ChatRoomX on ChatRoom {
     return readBy[userId]!.isBefore(lastMessageAt!);
   }
 
+  // Check if the room has expired based on the expiresAt timestamp
+  bool get isExpired {
+    if (expiresAt == null) return false;
+    return DateTime.now().isAfter(expiresAt!);
+  }
+  
+  // Check if the room is inactive (no messages for 24 hours)
+  bool get isInactive {
+    if (lastActivityAt == null) return false;
+    final difference = DateTime.now().difference(lastActivityAt!);
+    return difference.inHours >= 24;
+  }
+  
+  // Get the time remaining until expiration
+  Duration get timeUntilExpiration {
+    if (expiresAt == null) return Duration.zero;
+    final now = DateTime.now();
+    if (now.isAfter(expiresAt!)) return Duration.zero;
+    return expiresAt!.difference(now);
+  }
+  
+  // Parse the theme color from int to Color
+  Color get chatThemeColor => Color(themeColor);
+  
+  // Get formatted rules with default if not provided
+  String get formattedRules => rules ?? 'No specific rules set for this chat room.';
+  
+  // Check if a user needs to enter a password
+  bool needsPassword(String userId) {
+    return isPasswordProtected && !memberIds.contains(userId);
+  }
+  
+  // Check if anonymous users are allowed and this is not an NSFW room
+  bool canJoinAnonymously() {
+    return allowAnonymous && !isNsfw; // NSFW rooms always require authentication
+  }
+
   int get unreadCount {
     if (lastMessageAt == null) return 0;
     return readBy.values.where((timestamp) => 
@@ -172,6 +231,10 @@ extension ChatRoomTypeExtension on ChatRoomType {
         return 'Group Chat';
       case ChatRoomType.channel:
         return 'Channel';
+      case ChatRoomType.public:
+        return 'Public Chat';
+      case ChatRoomType.private:
+        return 'Private Chat';
     }
   }
 
@@ -185,5 +248,13 @@ extension ChatRoomTypeExtension on ChatRoomType {
 
   bool get isChannel {
     return this == ChatRoomType.channel;
+  }
+  
+  bool get isPublic {
+    return this == ChatRoomType.public;
+  }
+  
+  bool get isPrivate {
+    return this == ChatRoomType.private;
   }
 } 

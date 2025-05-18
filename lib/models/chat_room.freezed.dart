@@ -50,7 +50,28 @@ mixin _$ChatRoom {
   DateTime? get createdAt => throw _privateConstructorUsedError;
   DateTime? get updatedAt => throw _privateConstructorUsedError;
   bool? get isGroup => throw _privateConstructorUsedError;
-  bool? get requireApproval => throw _privateConstructorUsedError;
+  bool? get requireApproval =>
+      throw _privateConstructorUsedError; // Location-based properties
+  double get latitude => throw _privateConstructorUsedError;
+  double get longitude => throw _privateConstructorUsedError;
+  double get radius =>
+      throw _privateConstructorUsedError; // Default radius in km
+  bool get isActive => throw _privateConstructorUsedError;
+  int get participantCount =>
+      throw _privateConstructorUsedError; // New properties for expiration and customization
+  DateTime? get expiresAt =>
+      throw _privateConstructorUsedError; // Auto-expiration timestamp (24 hours from creation/last activity)
+  DateTime? get lastActivityAt =>
+      throw _privateConstructorUsedError; // Timestamp of last activity in the room
+  bool get isNsfw =>
+      throw _privateConstructorUsedError; // Flag for NSFW content
+  String? get rules =>
+      throw _privateConstructorUsedError; // Optional rules for the chat room
+  int get themeColor =>
+      throw _privateConstructorUsedError; // Theme color for the chat room UI (default blue)
+  bool get allowAnonymous =>
+      throw _privateConstructorUsedError; // Whether to allow anonymous users to join
+  Map<String, dynamic> get activityLog => throw _privateConstructorUsedError;
 
   /// Serializes this ChatRoom to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -97,7 +118,19 @@ abstract class $ChatRoomCopyWith<$Res> {
       DateTime? createdAt,
       DateTime? updatedAt,
       bool? isGroup,
-      bool? requireApproval});
+      bool? requireApproval,
+      double latitude,
+      double longitude,
+      double radius,
+      bool isActive,
+      int participantCount,
+      DateTime? expiresAt,
+      DateTime? lastActivityAt,
+      bool isNsfw,
+      String? rules,
+      int themeColor,
+      bool allowAnonymous,
+      Map<String, dynamic> activityLog});
 }
 
 /// @nodoc
@@ -145,6 +178,18 @@ class _$ChatRoomCopyWithImpl<$Res, $Val extends ChatRoom>
     Object? updatedAt = freezed,
     Object? isGroup = freezed,
     Object? requireApproval = freezed,
+    Object? latitude = null,
+    Object? longitude = null,
+    Object? radius = null,
+    Object? isActive = null,
+    Object? participantCount = null,
+    Object? expiresAt = freezed,
+    Object? lastActivityAt = freezed,
+    Object? isNsfw = null,
+    Object? rules = freezed,
+    Object? themeColor = null,
+    Object? allowAnonymous = null,
+    Object? activityLog = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -267,6 +312,54 @@ class _$ChatRoomCopyWithImpl<$Res, $Val extends ChatRoom>
           ? _value.requireApproval
           : requireApproval // ignore: cast_nullable_to_non_nullable
               as bool?,
+      latitude: null == latitude
+          ? _value.latitude
+          : latitude // ignore: cast_nullable_to_non_nullable
+              as double,
+      longitude: null == longitude
+          ? _value.longitude
+          : longitude // ignore: cast_nullable_to_non_nullable
+              as double,
+      radius: null == radius
+          ? _value.radius
+          : radius // ignore: cast_nullable_to_non_nullable
+              as double,
+      isActive: null == isActive
+          ? _value.isActive
+          : isActive // ignore: cast_nullable_to_non_nullable
+              as bool,
+      participantCount: null == participantCount
+          ? _value.participantCount
+          : participantCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      expiresAt: freezed == expiresAt
+          ? _value.expiresAt
+          : expiresAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      lastActivityAt: freezed == lastActivityAt
+          ? _value.lastActivityAt
+          : lastActivityAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      isNsfw: null == isNsfw
+          ? _value.isNsfw
+          : isNsfw // ignore: cast_nullable_to_non_nullable
+              as bool,
+      rules: freezed == rules
+          ? _value.rules
+          : rules // ignore: cast_nullable_to_non_nullable
+              as String?,
+      themeColor: null == themeColor
+          ? _value.themeColor
+          : themeColor // ignore: cast_nullable_to_non_nullable
+              as int,
+      allowAnonymous: null == allowAnonymous
+          ? _value.allowAnonymous
+          : allowAnonymous // ignore: cast_nullable_to_non_nullable
+              as bool,
+      activityLog: null == activityLog
+          ? _value.activityLog
+          : activityLog // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>,
     ) as $Val);
   }
 }
@@ -309,7 +402,19 @@ abstract class _$$ChatRoomImplCopyWith<$Res>
       DateTime? createdAt,
       DateTime? updatedAt,
       bool? isGroup,
-      bool? requireApproval});
+      bool? requireApproval,
+      double latitude,
+      double longitude,
+      double radius,
+      bool isActive,
+      int participantCount,
+      DateTime? expiresAt,
+      DateTime? lastActivityAt,
+      bool isNsfw,
+      String? rules,
+      int themeColor,
+      bool allowAnonymous,
+      Map<String, dynamic> activityLog});
 }
 
 /// @nodoc
@@ -355,6 +460,18 @@ class __$$ChatRoomImplCopyWithImpl<$Res>
     Object? updatedAt = freezed,
     Object? isGroup = freezed,
     Object? requireApproval = freezed,
+    Object? latitude = null,
+    Object? longitude = null,
+    Object? radius = null,
+    Object? isActive = null,
+    Object? participantCount = null,
+    Object? expiresAt = freezed,
+    Object? lastActivityAt = freezed,
+    Object? isNsfw = null,
+    Object? rules = freezed,
+    Object? themeColor = null,
+    Object? allowAnonymous = null,
+    Object? activityLog = null,
   }) {
     return _then(_$ChatRoomImpl(
       id: null == id
@@ -477,6 +594,54 @@ class __$$ChatRoomImplCopyWithImpl<$Res>
           ? _value.requireApproval
           : requireApproval // ignore: cast_nullable_to_non_nullable
               as bool?,
+      latitude: null == latitude
+          ? _value.latitude
+          : latitude // ignore: cast_nullable_to_non_nullable
+              as double,
+      longitude: null == longitude
+          ? _value.longitude
+          : longitude // ignore: cast_nullable_to_non_nullable
+              as double,
+      radius: null == radius
+          ? _value.radius
+          : radius // ignore: cast_nullable_to_non_nullable
+              as double,
+      isActive: null == isActive
+          ? _value.isActive
+          : isActive // ignore: cast_nullable_to_non_nullable
+              as bool,
+      participantCount: null == participantCount
+          ? _value.participantCount
+          : participantCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      expiresAt: freezed == expiresAt
+          ? _value.expiresAt
+          : expiresAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      lastActivityAt: freezed == lastActivityAt
+          ? _value.lastActivityAt
+          : lastActivityAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      isNsfw: null == isNsfw
+          ? _value.isNsfw
+          : isNsfw // ignore: cast_nullable_to_non_nullable
+              as bool,
+      rules: freezed == rules
+          ? _value.rules
+          : rules // ignore: cast_nullable_to_non_nullable
+              as String?,
+      themeColor: null == themeColor
+          ? _value.themeColor
+          : themeColor // ignore: cast_nullable_to_non_nullable
+              as int,
+      allowAnonymous: null == allowAnonymous
+          ? _value.allowAnonymous
+          : allowAnonymous // ignore: cast_nullable_to_non_nullable
+              as bool,
+      activityLog: null == activityLog
+          ? _value._activityLog
+          : activityLog // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>,
     ));
   }
 }
@@ -514,7 +679,19 @@ class _$ChatRoomImpl extends _ChatRoom {
       this.createdAt,
       this.updatedAt,
       this.isGroup,
-      this.requireApproval})
+      this.requireApproval,
+      required this.latitude,
+      required this.longitude,
+      this.radius = 5.0,
+      this.isActive = true,
+      this.participantCount = 0,
+      this.expiresAt,
+      this.lastActivityAt,
+      this.isNsfw = false,
+      this.rules,
+      this.themeColor = 0xFF2196F3,
+      this.allowAnonymous = false,
+      final Map<String, dynamic> activityLog = const {}})
       : _memberIds = memberIds,
         _memberRoles = memberRoles,
         _mutedBy = mutedBy,
@@ -524,6 +701,7 @@ class _$ChatRoomImpl extends _ChatRoom {
         _admins = admins,
         _bannedUsers = bannedUsers,
         _participants = participants,
+        _activityLog = activityLog,
         super._();
 
   factory _$ChatRoomImpl.fromJson(Map<String, dynamic> json) =>
@@ -655,10 +833,56 @@ class _$ChatRoomImpl extends _ChatRoom {
   final bool? isGroup;
   @override
   final bool? requireApproval;
+// Location-based properties
+  @override
+  final double latitude;
+  @override
+  final double longitude;
+  @override
+  @JsonKey()
+  final double radius;
+// Default radius in km
+  @override
+  @JsonKey()
+  final bool isActive;
+  @override
+  @JsonKey()
+  final int participantCount;
+// New properties for expiration and customization
+  @override
+  final DateTime? expiresAt;
+// Auto-expiration timestamp (24 hours from creation/last activity)
+  @override
+  final DateTime? lastActivityAt;
+// Timestamp of last activity in the room
+  @override
+  @JsonKey()
+  final bool isNsfw;
+// Flag for NSFW content
+  @override
+  final String? rules;
+// Optional rules for the chat room
+  @override
+  @JsonKey()
+  final int themeColor;
+// Theme color for the chat room UI (default blue)
+  @override
+  @JsonKey()
+  final bool allowAnonymous;
+// Whether to allow anonymous users to join
+  final Map<String, dynamic> _activityLog;
+// Whether to allow anonymous users to join
+  @override
+  @JsonKey()
+  Map<String, dynamic> get activityLog {
+    if (_activityLog is EqualUnmodifiableMapView) return _activityLog;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_activityLog);
+  }
 
   @override
   String toString() {
-    return 'ChatRoom(id: $id, name: $name, type: $type, memberIds: $memberIds, createdBy: $createdBy, memberRoles: $memberRoles, photoUrl: $photoUrl, description: $description, isPrivate: $isPrivate, isPinned: $isPinned, mutedBy: $mutedBy, archivedBy: $archivedBy, readBy: $readBy, lastMessageAt: $lastMessageAt, lastMessageId: $lastMessageId, lastMessageTimestamp: $lastMessageTimestamp, lastMessageSenderId: $lastMessageSenderId, lastMessage: $lastMessage, lastMessageType: $lastMessageType, metadata: $metadata, admins: $admins, bannedUsers: $bannedUsers, isPasswordProtected: $isPasswordProtected, password: $password, maxMembers: $maxMembers, participants: $participants, createdAt: $createdAt, updatedAt: $updatedAt, isGroup: $isGroup, requireApproval: $requireApproval)';
+    return 'ChatRoom(id: $id, name: $name, type: $type, memberIds: $memberIds, createdBy: $createdBy, memberRoles: $memberRoles, photoUrl: $photoUrl, description: $description, isPrivate: $isPrivate, isPinned: $isPinned, mutedBy: $mutedBy, archivedBy: $archivedBy, readBy: $readBy, lastMessageAt: $lastMessageAt, lastMessageId: $lastMessageId, lastMessageTimestamp: $lastMessageTimestamp, lastMessageSenderId: $lastMessageSenderId, lastMessage: $lastMessage, lastMessageType: $lastMessageType, metadata: $metadata, admins: $admins, bannedUsers: $bannedUsers, isPasswordProtected: $isPasswordProtected, password: $password, maxMembers: $maxMembers, participants: $participants, createdAt: $createdAt, updatedAt: $updatedAt, isGroup: $isGroup, requireApproval: $requireApproval, latitude: $latitude, longitude: $longitude, radius: $radius, isActive: $isActive, participantCount: $participantCount, expiresAt: $expiresAt, lastActivityAt: $lastActivityAt, isNsfw: $isNsfw, rules: $rules, themeColor: $themeColor, allowAnonymous: $allowAnonymous, activityLog: $activityLog)';
   }
 
   @override
@@ -717,7 +941,28 @@ class _$ChatRoomImpl extends _ChatRoom {
                 other.updatedAt == updatedAt) &&
             (identical(other.isGroup, isGroup) || other.isGroup == isGroup) &&
             (identical(other.requireApproval, requireApproval) ||
-                other.requireApproval == requireApproval));
+                other.requireApproval == requireApproval) &&
+            (identical(other.latitude, latitude) ||
+                other.latitude == latitude) &&
+            (identical(other.longitude, longitude) ||
+                other.longitude == longitude) &&
+            (identical(other.radius, radius) || other.radius == radius) &&
+            (identical(other.isActive, isActive) ||
+                other.isActive == isActive) &&
+            (identical(other.participantCount, participantCount) ||
+                other.participantCount == participantCount) &&
+            (identical(other.expiresAt, expiresAt) ||
+                other.expiresAt == expiresAt) &&
+            (identical(other.lastActivityAt, lastActivityAt) ||
+                other.lastActivityAt == lastActivityAt) &&
+            (identical(other.isNsfw, isNsfw) || other.isNsfw == isNsfw) &&
+            (identical(other.rules, rules) || other.rules == rules) &&
+            (identical(other.themeColor, themeColor) ||
+                other.themeColor == themeColor) &&
+            (identical(other.allowAnonymous, allowAnonymous) ||
+                other.allowAnonymous == allowAnonymous) &&
+            const DeepCollectionEquality()
+                .equals(other._activityLog, _activityLog));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -753,7 +998,19 @@ class _$ChatRoomImpl extends _ChatRoom {
         createdAt,
         updatedAt,
         isGroup,
-        requireApproval
+        requireApproval,
+        latitude,
+        longitude,
+        radius,
+        isActive,
+        participantCount,
+        expiresAt,
+        lastActivityAt,
+        isNsfw,
+        rules,
+        themeColor,
+        allowAnonymous,
+        const DeepCollectionEquality().hash(_activityLog)
       ]);
 
   /// Create a copy of ChatRoom
@@ -803,7 +1060,19 @@ abstract class _ChatRoom extends ChatRoom {
       final DateTime? createdAt,
       final DateTime? updatedAt,
       final bool? isGroup,
-      final bool? requireApproval}) = _$ChatRoomImpl;
+      final bool? requireApproval,
+      required final double latitude,
+      required final double longitude,
+      final double radius,
+      final bool isActive,
+      final int participantCount,
+      final DateTime? expiresAt,
+      final DateTime? lastActivityAt,
+      final bool isNsfw,
+      final String? rules,
+      final int themeColor,
+      final bool allowAnonymous,
+      final Map<String, dynamic> activityLog}) = _$ChatRoomImpl;
   const _ChatRoom._() : super._();
 
   factory _ChatRoom.fromJson(Map<String, dynamic> json) =
@@ -868,7 +1137,32 @@ abstract class _ChatRoom extends ChatRoom {
   @override
   bool? get isGroup;
   @override
-  bool? get requireApproval;
+  bool? get requireApproval; // Location-based properties
+  @override
+  double get latitude;
+  @override
+  double get longitude;
+  @override
+  double get radius; // Default radius in km
+  @override
+  bool get isActive;
+  @override
+  int get participantCount; // New properties for expiration and customization
+  @override
+  DateTime?
+      get expiresAt; // Auto-expiration timestamp (24 hours from creation/last activity)
+  @override
+  DateTime? get lastActivityAt; // Timestamp of last activity in the room
+  @override
+  bool get isNsfw; // Flag for NSFW content
+  @override
+  String? get rules; // Optional rules for the chat room
+  @override
+  int get themeColor; // Theme color for the chat room UI (default blue)
+  @override
+  bool get allowAnonymous; // Whether to allow anonymous users to join
+  @override
+  Map<String, dynamic> get activityLog;
 
   /// Create a copy of ChatRoom
   /// with the given fields replaced by the non-null parameter values.

@@ -1,15 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sifter/models/message.dart';
-import 'package:sifter/providers/app_providers.dart';
 import 'package:sifter/services/message_service.dart';
-import 'package:sifter/services/user_service.dart';
-import 'package:sifter/widgets/chat_bubble.dart';
-import 'package:sifter/widgets/chat_input.dart';
 import 'package:sifter/providers/riverpod/message_provider.dart';
-import 'package:sifter/providers/riverpod/room_provider.dart';
+import 'package:sifter/providers/riverpod/room_provider.dart' as room_provider;
 import 'package:sifter/providers/riverpod/user_provider.dart';
 import 'package:intl/intl.dart';
 
@@ -17,9 +12,9 @@ class ChatScreen extends ConsumerStatefulWidget {
   final String roomId;
   
   const ChatScreen({
-    Key? key,
+    super.key,
     required this.roomId,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -29,10 +24,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final MessageService _messageService = MessageService();
-  final UserService _userService = UserService();
   
-  // Add state for reply functionality
-  Message? _replyToMessage;
   bool _isLoadingMore = false;
   bool _hasMoreMessages = true;
   DocumentSnapshot? _lastMessageDoc;
@@ -148,84 +140,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _scrollToBottom();
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to send message: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-  
-  void _handleReplyToMessage(Message message) {
-    setState(() {
-      _replyToMessage = message;
-    });
-  }
-  
-  void _cancelReply() {
-    setState(() {
-      _replyToMessage = null;
-    });
-  }
-
-  void _handleSendImage(File file) async {
-    final currentUser = ref.read(userNotifierProvider).value;
-    if (currentUser == null) return;
-    
-    try {
-      await _messageService.sendImageMessage(
-        roomId: widget.roomId,
-        senderId: currentUser.id,
-        imageFile: file,
-        replyToMessageId: _replyToMessage?.id,
-      );
-      _cancelReply();
-    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending image: $e')),
+          SnackBar(
+            content: Text('Failed to send message: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
-  }
-
-  void _handleSendFile(File file) async {
-    final currentUser = ref.read(userNotifierProvider).value;
-    if (currentUser == null) return;
-    
-    try {
-      await _messageService.sendFileMessage(
-        roomId: widget.roomId,
-        senderId: currentUser.id,
-        file: file,
-        replyToMessageId: _replyToMessage?.id,
-      );
-      _cancelReply();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending file: $e')),
-        );
-      }
-    }
-  }
-
-  void _handleSendAudio(File file) async {
-    // Implementation would go here
-  }
-
-  void _handleSendLocation(String location) async {
-    // Implementation would go here
-  }
-
-  void _handleSendContact(Map<String, dynamic> contact) async {
-    // Implementation would go here
   }
   
   @override
   Widget build(BuildContext context) {
-    final roomAsync = ref.watch(roomProvider(widget.roomId));
+    final roomAsync = ref.watch(room_provider.roomProvider(widget.roomId));
     final messagesAsync = ref.watch(roomMessagesNotifierProvider(widget.roomId));
     final currentUserAsync = ref.watch(userNotifierProvider);
     
@@ -334,7 +262,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           BoxShadow(
             offset: const Offset(0, -1),
             blurRadius: 4,
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withAlpha(26),
           ),
         ],
       ),
@@ -367,21 +295,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
   
-  String _formatTimestamp(DateTime timestamp) {
+  String _formatTimestamp(dynamic timestamp) {
+    final DateTime dateTime;
+    
+    if (timestamp is int) {
+      dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    } else if (timestamp is DateTime) {
+      dateTime = timestamp;
+    } else {
+      return ''; // Unknown timestamp format
+    }
+    
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final messageDate = DateTime(
-      timestamp.year,
-      timestamp.month,
-      timestamp.day,
+      dateTime.year,
+      dateTime.month,
+      dateTime.day,
     );
     
     if (messageDate == today) {
-      return DateFormat.jm().format(timestamp); // 3:30 PM
+      return DateFormat.jm().format(dateTime); // 3:30 PM
     } else if (messageDate == today.subtract(const Duration(days: 1))) {
-      return 'Yesterday, ${DateFormat.jm().format(timestamp)}';
+      return 'Yesterday, ${DateFormat.jm().format(dateTime)}';
     } else {
-      return DateFormat.yMMMd().add_jm().format(timestamp); // Apr 27, 2023, 3:30 PM
+      return DateFormat.yMMMd().add_jm().format(dateTime); // Apr 27, 2023, 3:30 PM
     }
   }
 }

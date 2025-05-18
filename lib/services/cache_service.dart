@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sifter/services/analytics_service.dart';
 
 class CacheService {
@@ -103,10 +104,10 @@ class CacheService {
       _prefs = await SharedPreferences.getInstance();
       await _analytics.logEvent('cache_initialized');
     } catch (e) {
-      await _analytics.logError(
-        error: 'cache_init_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'cache_init_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -133,10 +134,10 @@ class CacheService {
         'value_type': value.runtimeType.toString(),
       });
     } catch (e) {
-      await _analytics.logError(
-        error: 'save_data_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'save_data_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -159,10 +160,10 @@ class CacheService {
         return value != null ? jsonDecode(value) as T : null;
       }
     } catch (e) {
-      _analytics.logError(
-        error: 'get_data_error',
-        errorMessage: e.toString(),
-      );
+      _analytics.logEvent('error', parameters: {
+        'error_type': 'get_data_error',
+        'error_message': e.toString(),
+      });
       return null;
     }
   }
@@ -175,10 +176,10 @@ class CacheService {
         'key': key,
       });
     } catch (e) {
-      await _analytics.logError(
-        error: 'remove_data_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'remove_data_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -189,10 +190,10 @@ class CacheService {
       await _prefs.clear();
       await _analytics.logEvent('cache_cleared');
     } catch (e) {
-      await _analytics.logError(
-        error: 'clear_cache_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'clear_cache_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -213,10 +214,10 @@ class CacheService {
       await saveData('user_preferences', preferences);
       await _analytics.logEvent('user_preferences_saved');
     } catch (e) {
-      await _analytics.logError(
-        error: 'save_preferences_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'save_preferences_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -234,10 +235,10 @@ class CacheService {
         'room_id': roomId,
       });
     } catch (e) {
-      await _analytics.logError(
-        error: 'save_room_data_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'save_room_data_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -255,10 +256,10 @@ class CacheService {
         'message_id': messageId,
       });
     } catch (e) {
-      await _analytics.logError(
-        error: 'save_message_data_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'save_message_data_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -276,10 +277,10 @@ class CacheService {
         'user_id': userId,
       });
     } catch (e) {
-      await _analytics.logError(
-        error: 'save_user_data_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'save_user_data_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -295,10 +296,10 @@ class CacheService {
       await saveData('search_history', searches);
       await _analytics.logEvent('search_history_saved');
     } catch (e) {
-      await _analytics.logError(
-        error: 'save_search_history_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'save_search_history_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }
@@ -314,10 +315,10 @@ class CacheService {
       await removeData('search_history');
       await _analytics.logEvent('search_history_cleared');
     } catch (e) {
-      await _analytics.logError(
-        error: 'clear_search_history_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'error_type': 'clear_search_history_error',
+        'error_message': e.toString(),
+      });
       rethrow;
     }
   }

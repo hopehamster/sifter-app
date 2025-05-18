@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sifter/providers/riverpod/auth_provider.dart';
 import 'package:sifter/screens/auth/login_screen.dart';
 import 'package:sifter/screens/bottomNav/bottom_nav.dart';
+import 'package:sifter/screens/onboarding_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -32,8 +34,25 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     
     // Navigate to the appropriate screen after splash
     Future.delayed(const Duration(seconds: 3), () {
-      _checkAuthState();
+      _checkOnboardingStatus();
     });
+  }
+  
+  Future<void> _checkOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+    
+    if (!onboardingCompleted) {
+      // User hasn't completed onboarding, show onboarding screen
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        );
+      }
+    } else {
+      // Onboarding completed, check auth state
+      _checkAuthState();
+    }
   }
   
   void _checkAuthState() {
@@ -94,7 +113,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                   Text(
                     'Connect with the world around you',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onBackground.withOpacity(0.7),
+                      color: Theme.of(context).colorScheme.onBackground.withAlpha(179),
                     ),
                   ),
                 ],

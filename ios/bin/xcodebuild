@@ -1,0 +1,17 @@
+#!/bin/bash
+# Wrapper for xcodebuild that injects our build phase
+REAL_XCODEBUILD="$(which -a xcodebuild | grep -v "$(pwd)/bin" | head -1)"
+
+# Run real xcodebuild with all original arguments
+"$REAL_XCODEBUILD" "$@"
+
+# Get the exit code
+EXIT_CODE=$?
+
+# If we just built successfully, run our post-build patch
+if [ $EXIT_CODE -eq 0 ]; then
+  echo "Build succeeded, running post-build framework patcher..."
+  "$(dirname "$0")/../hooks/patch_frameworks.sh"
+fi
+
+exit $EXIT_CODE

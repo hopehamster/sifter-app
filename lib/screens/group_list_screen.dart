@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:location/location.dart';
 import '../models/chat_room.dart';
-import '../models/user.dart';
 import '../services/chat_service.dart';
-import '../services/user_service.dart';
 import '../services/points_service.dart';
+import '../services/location_service.dart';
+import '../constants/ad_constants.dart';
 import '../widgets/join_group_dialog.dart';
 import 'create_group_screen.dart';
 import 'dart:math' as math;
@@ -27,7 +26,8 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
   List<ChatRoom> _groups = [];
   bool _isLoading = true;
   String? _error;
-  LocationData? _currentLocation;
+  double? _currentLatitude;
+  double? _currentLongitude;
   BannerAd? _bannerAd;
   RewardedAd? _rewardedAd;
   int _userPoints = 0;
@@ -54,7 +54,7 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
   Future<void> _loadAds() async {
     // Load banner ad
     _bannerAd = BannerAd(
-      adUnitId: 'ca-app-pub-4410913273665896/4892470653',
+      adUnitId: AdConstants.bannerAdUnitId,
       size: AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(
@@ -68,7 +68,7 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
 
     // Load rewarded ad
     await RewardedAd.load(
-      adUnitId: 'ca-app-pub-4410913273665896/5426823122',
+      adUnitId: AdConstants.rewardedAdUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
@@ -84,9 +84,14 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
 
   Future<void> _getCurrentLocation() async {
     try {
-      final location = Location();
-      final locationData = await location.getLocation();
-      setState(() => _currentLocation = locationData);
+      final locationService = LocationService.instance;
+      final position = await locationService.getCurrentLocation();
+      if (position != null) {
+        setState(() {
+          _currentLatitude = position.latitude;
+          _currentLongitude = position.longitude;
+        });
+      }
     } catch (e) {
       print('Failed to get location: $e');
     }
@@ -110,11 +115,13 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
         }
 
         // If location is available, check if group is within range
-        if (_currentLocation != null && group.metadata['location'] != null) {
+        if (_currentLatitude != null && _currentLongitude != null && 
+            group.metadata['location'] != null) {
           final groupLocation = group.metadata['location'] as Map<String, dynamic>;
-          final distance = _calculateDistance(
-            _currentLocation!.latitude!,
-            _currentLocation!.longitude!,
+          final locationService = LocationService.instance;
+          final distance = locationService.calculateDistance(
+            _currentLatitude!,
+            _currentLongitude!,
             groupLocation['latitude'] as double,
             groupLocation['longitude'] as double,
           );
@@ -134,22 +141,6 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
         _isLoading = false;
       });
     }
-  }
-
-  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    // Haversine formula to calculate distance between two points
-    const R = 6371.0; // Earth's radius in kilometers
-    final dLat = _toRadians(lat2 - lat1);
-    final dLon = _toRadians(lon2 - lon1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_toRadians(lat1)) * math.cos(_toRadians(lat2)) * 
-        math.sin(dLon / 2) * math.sin(dLon / 2);
-    final c = 2 * math.asin(math.sqrt(a));
-    return R * c;
-  }
-
-  double _toRadians(double degree) {
-    return degree * (3.141592653589793 / 180);
   }
 
   Future<void> _showRewardedAd() async {
@@ -183,11 +174,20 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
   }
 
   void _navigateToCreateGroup() async {
+    if (_currentLatitude == null || _currentLongitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location is required to create a group. Please enable location services.')),
+      );
+      return;
+    }
+    
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CreateGroupScreen(
           currentUserId: widget.currentUserId,
+          latitude: _currentLatitude!,
+          longitude: _currentLongitude!,
         ),
       ),
     );
@@ -195,6 +195,7 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
     if (result != null) {
       // Refresh the list after creating a group
       await _loadGroups();
+      await _loadUserPoints(); // Refresh points after creating a group
     }
   }
 
@@ -209,6 +210,7 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
 
     if (result == true) {
       await _loadGroups();
+      await _loadUserPoints(); // Refresh points after joining a group
     }
   }
 
@@ -248,18 +250,10 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
               const SizedBox(width: 16),
               ElevatedButton.icon(
                 onPressed: _navigateToCreateGroup,
-                icon: const Icon(Icons.add),
+                icon: const Icon(Icons.add_circle),
                 label: const Text('Create Group'),
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Your Points: $_userPoints',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
           ),
         ],
       ),

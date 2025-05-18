@@ -255,7 +255,12 @@ class DatabaseService {
     bool merge = false,
   }) async {
     try {
-      await _rtDatabase.ref(path).set(data, merge: merge);
+      final ref = _rtDatabase.ref(path);
+      if (merge) {
+        await ref.update(data);
+      } else {
+        await ref.set(data);
+      }
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Error setting data');
       throw Exception('Failed to set data: $e');
@@ -397,12 +402,10 @@ class DatabaseService {
 
   Future<void> runRtdbTransaction({
     required String path,
-    required dynamic Function(dynamic currentData) transactionHandler,
+    required rtdb.TransactionHandler transactionHandler,
   }) async {
     try {
-      await _rtDatabase.ref(path).runTransaction((mutableData) async {
-        return transactionHandler(mutableData);
-      });
+      await _rtDatabase.ref(path).runTransaction(transactionHandler);
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Error running RTDB transaction');
       throw Exception('Failed to run transaction: $e');
@@ -411,7 +414,7 @@ class DatabaseService {
 
   Future<void> setOfflineCapability(bool enabled) async {
     try {
-      await _rtDatabase.setPersistenceEnabled(enabled);
+      _rtDatabase.setPersistenceEnabled(enabled);
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Error setting offline capability');
       throw Exception('Failed to set offline capability: $e');
@@ -438,7 +441,7 @@ class DatabaseService {
 
   Future<void> goOnline() async {
     try {
-      await _rtDatabase.goOnline();
+      _rtDatabase.goOnline();
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Error going online');
       throw Exception('Failed to go online: $e');
@@ -447,7 +450,7 @@ class DatabaseService {
 
   Future<void> purgeOutstandingWrites() async {
     try {
-      await _rtDatabase.purgeOutstandingWrites();
+      _rtDatabase.purgeOutstandingWrites();
     } catch (e, stack) {
       ErrorHandler.logError(e, stack, message: 'Error purging outstanding writes');
       throw Exception('Failed to purge outstanding writes: $e');

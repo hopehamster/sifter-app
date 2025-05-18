@@ -1,9 +1,6 @@
-import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sifter/services/analytics_service.dart';
 import 'user_service.dart';
 
@@ -155,7 +152,6 @@ class NotificationService {
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     try {
       final notification = message.notification;
-      final android = message.notification?.android;
 
       if (notification != null) {
         await showLocalNotification(
@@ -184,6 +180,18 @@ class NotificationService {
       'title': message.notification?.title,
       'body': message.notification?.body,
     });
+  }
+
+  // Add handleInitialization method for main.dart to call
+  Future<void> handleInitialization() async {
+    try {
+      await initialize();
+      return;
+    } catch (e) {
+      print('Error during notification service initialization: $e');
+      // Return rather than rethrowing to allow the app to continue
+      return;
+    }
   }
 }
 

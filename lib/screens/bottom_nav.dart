@@ -8,6 +8,8 @@ import 'chat_screen.dart';
 import 'profile_screen.dart';
 import 'admin_panel_screen.dart';
 import 'login_screen.dart';
+import 'nearby_chats_screen.dart';
+import 'map_discovery_screen.dart';
 
 class BottomNav extends StatefulWidget {
   @override
@@ -20,7 +22,8 @@ class _BottomNavState extends State<BottomNav> {
 
   final List<Widget> _screens = [
     ChatSelectionScreen(),
-    ChatScreen(roomId: 'default_room'), // Placeholder roomId
+    NearbyChatsScreen(),
+    const MapDiscoveryScreen(),
     ProfileScreen(),
   ];
 
@@ -63,7 +66,7 @@ class _BottomNavState extends State<BottomNav> {
       return;
     }
 
-    if (index == 2) {
+    if (index == 3) {
       // Long-press on Profile tab to access admin panel
       _navigateToAdmin = true;
     } else {
@@ -91,14 +94,28 @@ class _BottomNavState extends State<BottomNav> {
     return Scaffold(
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.add), label: 'Create Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chats'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        type: BottomNavigationBarType.fixed,
+        items: <BottomNavigationBarItem>[
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.chat),
+            label: 'Chats',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.near_me),
+            label: 'Nearby',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.map),
+            label: 'Map View',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: Color(0xFF2196F3),
-        unselectedItemColor: Color(0xFFB0BEC5),
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
       ).animate().scale(duration: 200.ms),
     );

@@ -32,7 +32,7 @@ class LinkPreviewGenerator extends StatefulWidget {
   ///  Deafults to `[BoxShadow(
   ///               spreadRadius: 1,
   ///               blurRadius: 5,
-  ///               color: Colors.grey.withOpacity(0.5),
+  ///               color: Colors.grey.withAlpha(128),
   ///               offset: Offset(0, 3),)]`.
   final List<BoxShadow>? boxShadow;
 
@@ -135,26 +135,26 @@ class LinkPreviewGenerator extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _LinkPreviewGeneratorState createState() => _LinkPreviewGeneratorState();
+  State<LinkPreviewGenerator> createState() => LinkPreviewGeneratorState();
 }
 
-class _LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
-  WebInfo? _info;
-  bool _loading = false;
-  late String _url;
+class LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
+  WebInfo? info;
+  bool loading = false;
+  late String url;
 
   @override
   Widget build(BuildContext context) {
-    final info = _info;
-    var _height = (widget.linkPreviewStyle == LinkPreviewStyle.small ||
+    final currentInfo = info;
+    var containerHeight = (widget.linkPreviewStyle == LinkPreviewStyle.small ||
             !widget.showGraphic)
         ? MediaQuery.of(context).size.height * 0.15
         : MediaQuery.of(context).size.height * 0.30;
 
-    if (_loading) {
+    if (loading) {
       return widget.placeholderWidget ??
           Container(
-            height: _height,
+            height: containerHeight,
             width: MediaQuery.of(context).size.width,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(widget.borderRadius),
@@ -165,11 +165,11 @@ class _LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
           );
     }
 
-    if (_info != null) {
-      if (_info!.type == LinkPreviewType.image) {
-        var img = _info!.image;
-        return _buildLinkContainer(
-          _height,
+    if (info != null) {
+      if (info!.type == LinkPreviewType.image) {
+        var img = info!.image;
+        return buildLinkContainer(
+          containerHeight,
           title: widget.errorTitle,
           desc: widget.errorBody,
           image: (widget.proxyUrl ?? '') +
@@ -178,25 +178,25 @@ class _LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
       }
     }
 
-    return _info == null
+    return info == null
         ? widget.errorWidget ??
-            _buildPlaceHolder(widget.backgroundColor, _height)
-        : _buildLinkContainer(
-            _height,
+            buildPlaceHolder(widget.backgroundColor, containerHeight)
+        : buildLinkContainer(
+            containerHeight,
             domain:
-                LinkPreviewAnalyzer.isNotEmpty(info!.domain) ? info.domain : '',
-            title: LinkPreviewAnalyzer.isNotEmpty(info.title)
-                ? info.title
+                LinkPreviewAnalyzer.isNotEmpty(currentInfo!.domain) ? currentInfo.domain : '',
+            title: LinkPreviewAnalyzer.isNotEmpty(currentInfo.title)
+                ? currentInfo.title
                 : widget.errorTitle,
-            desc: LinkPreviewAnalyzer.isNotEmpty(info.description)
-                ? info.description
+            desc: LinkPreviewAnalyzer.isNotEmpty(currentInfo.description)
+                ? currentInfo.description
                 : widget.errorBody,
-            image: LinkPreviewAnalyzer.isNotEmpty(info.image)
-                ? info.image
-                : LinkPreviewAnalyzer.isNotEmpty(info.icon)
-                    ? info.icon
+            image: LinkPreviewAnalyzer.isNotEmpty(currentInfo.image)
+                ? currentInfo.image
+                : LinkPreviewAnalyzer.isNotEmpty(currentInfo.icon)
+                    ? currentInfo.icon
                     : widget.errorImage,
-            isIcon: LinkPreviewAnalyzer.isNotEmpty(info.image) ? false : true,
+            isIcon: LinkPreviewAnalyzer.isNotEmpty(currentInfo.image) ? false : true,
           );
   }
 
@@ -204,16 +204,16 @@ class _LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
   void initState() {
     super.initState();
 
-    _url = ((widget.proxyUrl ?? '') + widget.link).trim();
-    _info = LinkPreviewAnalyzer.getInfoFromCache(_url) as WebInfo?;
-    if (_info == null) {
-      _loading = true;
-      _getInfo();
+    url = ((widget.proxyUrl ?? '') + widget.link).trim();
+    info = LinkPreviewAnalyzer.getInfoFromCache(url) as WebInfo?;
+    if (info == null) {
+      loading = true;
+      getInfo();
     }
   }
 
-  Widget _buildLinkContainer(
-    double _height, {
+  Widget buildLinkContainer(
+    double containerHeight, {
     String? domain = '',
     String? title = '',
     String? desc = '',
@@ -231,14 +231,14 @@ class _LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
                   BoxShadow(
                     spreadRadius: 1,
                     blurRadius: 5,
-                    color: Colors.grey.withOpacity(0.5),
+                    color: Colors.grey.withAlpha(128),
                     offset: const Offset(0, 3),
                   )
                 ],
       ),
-      height: _height,
+      height: containerHeight,
       child: InkWell(
-        onTap: widget.onTap ?? () => _launchURL(widget.link),
+        onTap: widget.onTap ?? () => launchURL(widget.link),
         child: (widget.linkPreviewStyle == LinkPreviewStyle.small)
             ? LinkViewSmall(
                 key: widget.key ?? Key(widget.link.toString()),
@@ -284,7 +284,7 @@ class _LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
     );
   }
 
-  Widget _buildPlaceHolder(Color color, double defaultHeight) {
+  Widget buildPlaceHolder(Color color, double defaultHeight) {
     return SizedBox(
       height: defaultHeight,
       child: LayoutBuilder(
@@ -302,26 +302,27 @@ class _LinkPreviewGeneratorState extends State<LinkPreviewGenerator> {
     );
   }
 
-  Future<void> _getInfo() async {
-    if (_url.startsWith('http') || _url.startsWith('https')) {
-      _info = await LinkPreviewAnalyzer.getInfo(_url,
+  Future<void> getInfo() async {
+    if (url.startsWith('http') || url.startsWith('https')) {
+      info = await LinkPreviewAnalyzer.getInfo(url,
           cacheDuration: widget.cacheDuration, multimedia: true) as WebInfo?;
     } else {
-      print('Error: $_url is not starting with either http or https.');
+      print('Error: $url is not starting with either http or https.');
     }
     if (mounted) {
       setState(() {
-        _loading = false;
+        loading = false;
       });
     }
   }
 
-  void _launchURL(String url) async {
-    if (await canLaunch(url)) {
-      await launch(url);
+  void launchURL(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
     } else {
       try {
-        await launch(url);
+        await launchUrl(uri);
       } catch (err) {
         throw Exception('Could not launch $url. Error: $err');
       }

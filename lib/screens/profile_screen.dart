@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import '../services/mock_storage_service.dart';
 import '../providers/riverpod/auth_provider.dart' as riverpod_auth;
 import '../providers/app_providers.dart';
 import '../models/user.dart';

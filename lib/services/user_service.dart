@@ -1,11 +1,9 @@
-import 'package:firebase_database/firebase_database.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import '../models/user.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
+import 'mock_storage_service.dart';
 
 part 'user_service.g.dart';
 
@@ -82,7 +80,7 @@ class UserService {
       final snapshot = await _firestore
           .collection(_collection)
           .where('displayName', isGreaterThanOrEqualTo: query)
-          .where('displayName', isLessThanOrEqualTo: query + '\uf8ff')
+          .where('displayName', isLessThanOrEqualTo: '$query\uf8ff')
           .get();
 
       return snapshot.docs.map((doc) => AppUser.fromJson(doc.data())).toList();
@@ -109,9 +107,11 @@ class UserService {
 
   Future<String> uploadProfilePicture(String userId, File file) async {
     try {
-      final ref = FirebaseStorage.instance.ref().child('profile_pictures/$userId');
-      await ref.putFile(file);
-      return await ref.getDownloadURL();
+      final storageService = StorageService();
+      return await storageService.uploadFile(file, 'profile_pictures/$userId', metadata: {
+        'userId': userId,
+        'uploadedAt': DateTime.now().toIso8601String(),
+      });
     } catch (e) {
       throw Exception('Failed to upload profile picture: $e');
     }

@@ -1,0 +1,135 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '16.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# Require our custom build settings script
+require_relative 'custom_build_settings.rb'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+# Add source repositories
+source 'https://github.com/CocoaPods/Specs.git'
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  # Install the specific version of GoogleUtilities before other dependencies
+  pod 'GoogleUtilities', '7.13.0'
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+# Fix static framework linkage issues
+pre_install do |installer|
+  # workaround for https://github.com/CocoaPods/CocoaPods/issues/3289
+  Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
+end
+
+post_install do |installer|
+  # Apply our custom build settings to the Pods project
+  CustomBuildSettings.apply_to_project(installer.pods_project.path)
+  
+  # Fix Swift version and Bitcode settings
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['SWIFT_VERSION'] = '5.0'
+    config.build_settings['ENABLE_BITCODE'] = 'NO'
+  end
+  
+  # Configure all target build settings
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      # Ensure minimum deployment target
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      
+      # Remove problematic compiler flags - more aggressive approach
+      if config.build_settings['OTHER_CFLAGS'].kind_of?(Array)
+        config.build_settings['OTHER_CFLAGS'] = config.build_settings['OTHER_CFLAGS'].reject { |flag| flag.include?('-G') }
+      elsif config.build_settings['OTHER_CFLAGS'].kind_of?(String)
+        config.build_settings['OTHER_CFLAGS'] = config.build_settings['OTHER_CFLAGS'].gsub(/-G\S*/, '')
+      end
+
+      # Remove the flag from all possible build settings
+      ['OTHER_CFLAGS', 'OTHER_CXXFLAGS', 'COMPILER_FLAGS', 'WARNING_CFLAGS'].each do |flag_key|
+        if config.build_settings[flag_key].kind_of?(Array)
+          config.build_settings[flag_key] = config.build_settings[flag_key].reject { |flag| flag.include?('-G') }
+        elsif config.build_settings[flag_key].kind_of?(String)
+          config.build_settings[flag_key] = config.build_settings[flag_key].gsub(/-G\S*/, '')
+        end
+      end
+      
+      # Specifically fix BoringSSL-GRPC flags
+      if target.name == 'BoringSSL-GRPC'
+        puts "Applying special configuration for BoringSSL-GRPC"
+        # Disable all warnings completely
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+        config.build_settings['CLANG_WARN_DOCUMENTATION_COMMENTS'] = 'NO'
+        config.build_settings['CLANG_WARN_UNREACHABLE_CODE'] = 'NO'
+        config.build_settings['CLANG_WARN__DUPLICATE_METHOD_MATCH'] = 'NO'
+        config.build_settings['CLANG_WARN_UNGUARDED_AVAILABILITY'] = 'NO'
+        
+        # Set specific compiler flags (make sure this doesn't include any -G flags)
+        config.build_settings['OTHER_CFLAGS'] = '-w'
+        config.build_settings['OTHER_CXXFLAGS'] = '-w'
+        
+        # Add compiler-specific flags that might help
+        config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+      end
+      
+      # Add additional build settings as needed
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+    end
+  end
+  
+  # Specific for GoogleUtilities
+  installer.pods_project.targets.each do |target|
+    if target.name.start_with?('GoogleUtilities')
+      puts "Configuring #{target.name}"
+      target.build_configurations.each do |config|
+        config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+      end
+    end
+  end
+  
+  # Special handling for project-level build settings
+  installer.pods_project.build_configurations.each do |config|
+    # Remove the -G flag from any project-level settings
+    ['OTHER_CFLAGS', 'OTHER_CXXFLAGS', 'COMPILER_FLAGS', 'WARNING_CFLAGS'].each do |flag_key|
+      if config.build_settings[flag_key].kind_of?(Array)
+        config.build_settings[flag_key] = config.build_settings[flag_key].reject { |flag| flag.include?('-G') }
+      elsif config.build_settings[flag_key].kind_of?(String)
+        config.build_settings[flag_key] = config.build_settings[flag_key].gsub(/-G\S*/, '')
+      end
+    end
+  end
+end

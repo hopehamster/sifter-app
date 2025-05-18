@@ -30,7 +30,7 @@ class RoomNotifier extends _$RoomNotifier {
     state = const AsyncValue.loading();
     
     try {
-      final newRoom = await _roomService.createRoom(room);
+      final newRoom = await _roomService.createRoomObject(room);
       
       // Refresh the room list
       state = AsyncValue.data([...state.value ?? [], newRoom]);
@@ -45,7 +45,7 @@ class RoomNotifier extends _$RoomNotifier {
   // Update an existing room
   Future<void> updateRoom(ChatRoom updatedRoom) async {
     try {
-      await _roomService.updateRoom(updatedRoom);
+      await _roomService.updateRoomObject(updatedRoom);
       
       // Update the room in the local state
       state = AsyncValue.data(
@@ -121,7 +121,11 @@ class RoomNotifier extends _$RoomNotifier {
 Future<ChatRoom> room(RoomRef ref, String roomId) async {
   final roomService = ref.watch(roomServiceProvider);
   try {
-    return await roomService.getRoom(roomId);
+    final room = await roomService.getRoomById(roomId);
+    if (room == null) {
+      throw Exception('Room not found');
+    }
+    return room;
   } catch (e, stack) {
     ErrorHandler.logError(e, stack);
     throw Exception('Failed to fetch room: ${e.toString()}');

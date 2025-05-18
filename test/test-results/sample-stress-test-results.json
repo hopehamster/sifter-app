@@ -1,0 +1,254 @@
+{
+  "summary": {
+    "test_run_id": "1716153384942",
+    "timestamp": "2024-05-19T12:23:04.942Z",
+    "devices_tested": 3,
+    "scenarios_tested": 2,
+    "success_rate": 0.92,
+    "performance_summary": {
+      "avg_memory_usage_mb": 105.3,
+      "avg_cpu_usage_pct": 18.7,
+      "avg_fps": 58.4,
+      "avg_battery_drain_per_hour": 5.8,
+      "avg_network_response_ms": 145.2,
+      "meets_criteria": true
+    }
+  },
+  "device_results": {
+    "iPhone 15 Pro Max": {
+      "device": {
+        "name": "iPhone 15 Pro Max",
+        "os": "iOS",
+        "version": "17.4",
+        "resolution": "1290x2796",
+        "ram": 8
+      },
+      "scenarios": {
+        "standard_user_flow": {
+          "start_time": "2024-05-19T12:20:14.123Z",
+          "end_time": "2024-05-19T12:21:23.456Z",
+          "success": true,
+          "metrics": {
+            "memory": {
+              "avg_mb": 98.7,
+              "peak_mb": 124.5,
+              "variation_pct": 3
+            },
+            "cpu": {
+              "avg_pct": 14,
+              "peak_pct": 38
+            },
+            "battery": {
+              "drain_pct": 0.8,
+              "drain_per_hour": 5.0
+            },
+            "network": {
+              "avg_response_ms": 105,
+              "failed_requests_pct": 0,
+              "data_transferred_kb": 320
+            },
+            "rendering": {
+              "avg_fps": 59.8,
+              "jank_pct": 0.5,
+              "frame_build_time_ms": 8
+            }
+          },
+          "logs": []
+        },
+        "memory_load_test": {
+          "start_time": "2024-05-19T12:21:25.123Z",
+          "end_time": "2024-05-19T12:22:45.789Z",
+          "success": true,
+          "metrics": {
+            "memory": {
+              "avg_mb": 132.3,
+              "peak_mb": 178.6,
+              "variation_pct": 8
+            },
+            "cpu": {
+              "avg_pct": 22,
+              "peak_pct": 42
+            },
+            "battery": {
+              "drain_pct": 1.2,
+              "drain_per_hour": 5.0
+            },
+            "network": {
+              "avg_response_ms": 110,
+              "failed_requests_pct": 0,
+              "data_transferred_kb": 1240
+            },
+            "rendering": {
+              "avg_fps": 59.2,
+              "jank_pct": 1.2,
+              "frame_build_time_ms": 9
+            }
+          },
+          "logs": []
+        }
+      },
+      "start_time": "2024-05-19T12:20:12.345Z",
+      "end_time": "2024-05-19T12:22:47.890Z"
+    },
+    "Google Pixel 7 Pro": {
+      "device": {
+        "name": "Google Pixel 7 Pro",
+        "os": "Android",
+        "version": "13.0",
+        "resolution": "1440x3120",
+        "ram": 12
+      },
+      "scenarios": {
+        "standard_user_flow": {
+          "start_time": "2024-05-19T12:20:14.123Z",
+          "end_time": "2024-05-19T12:21:23.456Z",
+          "success": true,
+          "metrics": {
+            "memory": {
+              "avg_mb": 103.2,
+              "peak_mb": 128.7,
+              "variation_pct": 4
+            },
+            "cpu": {
+              "avg_pct": 16,
+              "peak_pct": 36
+            },
+            "battery": {
+              "drain_pct": 0.9,
+              "drain_per_hour": 5.5
+            },
+            "network": {
+              "avg_response_ms": 118,
+              "failed_requests_pct": 1,
+              "data_transferred_kb": 315
+            },
+            "rendering": {
+              "avg_fps": 59.5,
+              "jank_pct": 0.8,
+              "frame_build_time_ms": 9
+            }
+          },
+          "logs": []
+        },
+        "memory_load_test": {
+          "start_time": "2024-05-19T12:21:25.123Z",
+          "end_time": "2024-05-19T12:22:45.789Z",
+          "success": true,
+          "metrics": {
+            "memory": {
+              "avg_mb": 142.6,
+              "peak_mb": 184.3,
+              "variation_pct": 7
+            },
+            "cpu": {
+              "avg_pct": 23,
+              "peak_pct": 44
+            },
+            "battery": {
+              "drain_pct": 1.3,
+              "drain_per_hour": 5.5
+            },
+            "network": {
+              "avg_response_ms": 120,
+              "failed_requests_pct": 1,
+              "data_transferred_kb": 1280
+            },
+            "rendering": {
+              "avg_fps": 58.8,
+              "jank_pct": 1.8,
+              "frame_build_time_ms": 10
+            }
+          },
+          "logs": []
+        }
+      },
+      "start_time": "2024-05-19T12:20:12.345Z",
+      "end_time": "2024-05-19T12:22:47.890Z"
+    },
+    "Samsung Galaxy A53": {
+      "device": {
+        "name": "Samsung Galaxy A53",
+        "os": "Android",
+        "version": "12.0",
+        "resolution": "1080x2400",
+        "ram": 6
+      },
+      "scenarios": {
+        "standard_user_flow": {
+          "start_time": "2024-05-19T12:20:14.123Z",
+          "end_time": "2024-05-19T12:21:24.456Z",
+          "success": true,
+          "metrics": {
+            "memory": {
+              "avg_mb": 106.8,
+              "peak_mb": 132.1,
+              "variation_pct": 5
+            },
+            "cpu": {
+              "avg_pct": 19,
+              "peak_pct": 42
+            },
+            "battery": {
+              "drain_pct": 1.1,
+              "drain_per_hour": 6.5
+            },
+            "network": {
+              "avg_response_ms": 145,
+              "failed_requests_pct": 2,
+              "data_transferred_kb": 310
+            },
+            "rendering": {
+              "avg_fps": 56.2,
+              "jank_pct": 4.5,
+              "frame_build_time_ms": 12
+            }
+          },
+          "logs": []
+        },
+        "memory_load_test": {
+          "start_time": "2024-05-19T12:21:25.123Z",
+          "end_time": "2024-05-19T12:22:48.789Z",
+          "success": false,
+          "metrics": {
+            "memory": {
+              "avg_mb": 155.3,
+              "peak_mb": 197.8,
+              "variation_pct": 12
+            },
+            "cpu": {
+              "avg_pct": 34,
+              "peak_pct": 62
+            },
+            "battery": {
+              "drain_pct": 1.8,
+              "drain_per_hour": 6.8
+            },
+            "network": {
+              "avg_response_ms": 172,
+              "failed_requests_pct": 3,
+              "data_transferred_kb": 1150
+            },
+            "rendering": {
+              "avg_fps": 48.5,
+              "jank_pct": 12.2,
+              "frame_build_time_ms": 18
+            }
+          },
+          "logs": [
+            "Memory pressure detected, UI redraws taking longer than expected",
+            "Animation stuttering observed during message list scrolling"
+          ]
+        }
+      },
+      "start_time": "2024-05-19T12:20:12.345Z",
+      "end_time": "2024-05-19T12:22:52.890Z"
+    }
+  },
+  "recommendations": [
+    "Lower-end Android devices (Samsung Galaxy A53) show memory pressure during message_load_test. Consider implementing memory optimizations for these devices.",
+    "The UI shows animation stuttering on devices with 6GB RAM or less. Optimize list rendering and reduce animations complexity.",
+    "Battery drain is slightly higher on Samsung devices. Consider reducing background location updates frequency.",
+    "Continue monitoring with Firebase Performance for production metrics.",
+    "Setup automated stress testing in CI/CD pipeline for regression detection."
+  ]
+} 

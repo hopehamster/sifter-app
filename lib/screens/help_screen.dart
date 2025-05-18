@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sifter/utils/security.dart';
 import 'package:sifter/utils/whatsapp_util.dart';
-import 'package:sifter/providers/app_providers.dart';
+import 'package:sifter/providers/riverpod/user_provider.dart';
 
 class HelpScreen extends ConsumerWidget {
   const HelpScreen({Key? key}) : super(key: key);
@@ -128,17 +127,16 @@ class HelpScreen extends ConsumerWidget {
     return Column(
       children: [
         ListTile(
-          leading: const Icon(Icons.whatsapp, color: Color(0xFF25D366)),
+          leading: const Icon(Icons.phone, color: Color(0xFF25D366)),
           title: const Text('Contact us on WhatsApp'),
           subtitle: const Text('Get help from our support team'),
           onTap: () async {
-            final userProvider = ref.read(userProvider);
-            final currentUser = userProvider.value;
+            final currentUser = ref.read(userNotifierProvider).value;
             
             if (currentUser != null) {
               final supportMessage = WhatsAppUtil.createSupportMessage(
                 userId: currentUser.id,
-                username: currentUser.displayName ?? 'Unknown',
+                username: currentUser.displayName,
               );
               
               await WhatsAppUtil.launchWhatsAppChat(
@@ -174,16 +172,16 @@ class HelpScreen extends ConsumerWidget {
       query: 'subject=Sifter App Support Request',
     );
     
-    if (await canLaunch(emailUri.toString())) {
-      await launch(emailUri.toString());
+    if (await canLaunchUrl(emailUri)) {
+      await launchUrl(emailUri);
     }
   }
 
   Future<void> _launchHelpCenter() async {
-    const helpCenterUrl = 'https://sifterapp.com/help';
+    final helpCenterUrl = Uri.parse('https://sifterapp.com/help');
     
-    if (await canLaunch(helpCenterUrl)) {
-      await launch(helpCenterUrl);
+    if (await canLaunchUrl(helpCenterUrl)) {
+      await launchUrl(helpCenterUrl);
     }
   }
 } 

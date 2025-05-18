@@ -1,0 +1,10 @@
+// Custom configuration to work around -G flag compilation issue
+
+// Disable all warnings
+GCC_WARN_INHIBIT_ALL_WARNINGS = YES
+OTHER_CFLAGS = -w -Wno-format -Wno-everything
+OTHER_CXXFLAGS = -w -Wno-format -Wno-everything
+WARNING_CFLAGS = -w -Wno-format -Wno-everything
+
+// Preprocessor definitions to disable format attributes
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) OPENSSL_NO_ASM=1 __attribute__(x)=

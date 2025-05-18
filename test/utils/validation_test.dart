@@ -24,10 +24,10 @@ void main() {
       });
 
       test('returns false for invalid passwords', () {
-        expect(Validator.isValidPassword(''), isFalse);
-        expect(Validator.isValidPassword('short1'), isFalse);
-        expect(Validator.isValidPassword('onlyletters'), isFalse);
-        expect(Validator.isValidPassword('12345678'), isFalse);
+        expect(Validator.isValidPassword(''), isFalse, reason: "'empty string' should be invalid");
+        expect(Validator.isValidPassword('short1'), isFalse, reason: "'short1' should be invalid");
+        expect(Validator.isValidPassword('onlyletters'), isFalse, reason: "'onlyletters' should be invalid");
+        expect(Validator.isValidPassword('12345678'), isFalse, reason: "'12345678' should be invalid");
       });
     });
 

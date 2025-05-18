@@ -1,7 +1,6 @@
 import Flutter
 import UIKit
-import FirebaseCore
-
+// Firebase imports temporarily removed
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -9,7 +8,7 @@ import FirebaseCore
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    FirebaseApp.configure()
+    // Firebase initialization temporarily removed
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

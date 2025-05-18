@@ -1,30 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_functions/firebase_functions.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:giphy_get/giphy_get.dart';
-import 'package:link_preview_generator/link_preview_generator.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import '../providers/riverpod/auth_provider.dart';
-import '../services/chat_cache.dart';
-import '../widgets/audio_message.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'dart:async';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/message.dart';
 import '../models/chat_room.dart';
-import '../models/user.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../services/storage_service.dart';
+import '../services/location_service.dart';
 import '../widgets/message_bubble.dart';
-import '../widgets/typing_indicator.dart';
 import '../widgets/chat_input.dart';
 
 final chatScreenProvider = StateNotifierProvider.family<ChatScreenNotifier, ChatScreenState, String>((ref, chatRoomId) {
@@ -32,6 +21,7 @@ final chatScreenProvider = StateNotifierProvider.family<ChatScreenNotifier, Chat
     ref.read(chatServiceProvider),
     ref.read(userServiceProvider),
     ref.read(storageServiceProvider),
+    ref.read(locationServiceProvider),
     chatRoomId,
   );
 });
@@ -47,6 +37,7 @@ class ChatScreenState {
   final String? recordingPath;
   final bool isUploading;
   final double uploadProgress;
+  final bool isOutOfRange;
 
   ChatScreenState({
     this.messages = const [],
@@ -59,6 +50,7 @@ class ChatScreenState {
     this.recordingPath,
     this.isUploading = false,
     this.uploadProgress = 0.0,
+    this.isOutOfRange = false,
   });
 
   ChatScreenState copyWith({
@@ -72,6 +64,7 @@ class ChatScreenState {
     String? recordingPath,
     bool? isUploading,
     double? uploadProgress,
+    bool? isOutOfRange,
   }) {
     return ChatScreenState(
       messages: messages ?? this.messages,
@@ -84,6 +77,7 @@ class ChatScreenState {
       recordingPath: recordingPath ?? this.recordingPath,
       isUploading: isUploading ?? this.isUploading,
       uploadProgress: uploadProgress ?? this.uploadProgress,
+      isOutOfRange: isOutOfRange ?? this.isOutOfRange,
     );
   }
 }
@@ -92,6 +86,7 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   final ChatService _chatService;
   final UserService _userService;
   final StorageService _storageService;
+  final LocationService _locationService;
   final String _chatRoomId;
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -99,14 +94,17 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   Timer? _typingTimer;
   Timer? _recordingTimer;
-  Duration _recordingDuration = Duration.zero;
+  Timer? _locationCheckTimer;
   StreamSubscription? _messagesSubscription;
   StreamSubscription? _typingSubscription;
+  bool _hasJoinedRoom = false;
+  ChatRoom? _roomData;
 
   ChatScreenNotifier(
     this._chatService,
     this._userService,
     this._storageService,
+    this._locationService,
     this._chatRoomId,
   ) : super(ChatScreenState()) {
     _init();
@@ -114,6 +112,12 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
 
   Future<void> _init() async {
     try {
+      _roomData = await _chatService.getRoomDetails(_chatRoomId);
+      
+      await _chatService.updateParticipantCount(_chatRoomId, 1);
+      await _chatService.updateRoomActivity(_chatRoomId);
+      _hasJoinedRoom = true;
+      
       _messagesSubscription = _chatService
           .streamMessages(_chatRoomId)
           .listen((messages) {
@@ -130,6 +134,8 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
           typingUsers: typingUsers,
         );
       });
+      
+      _startLocationCheck();
     } catch (e) {
       state = state.copyWith(
         error: e.toString(),
@@ -137,20 +143,81 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
       );
     }
   }
+  
+  void _startLocationCheck() {
+    if (_roomData == null) return;
+    
+    _locationCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      try {
+        final position = await _locationService.getCurrentLocation();
+        if (position != null && _roomData != null) {
+          final isInRange = _locationService.isWithinRadius(
+            position.latitude,
+            position.longitude,
+            _roomData!.latitude,
+            _roomData!.longitude,
+            _roomData!.radius
+          );
+          
+          if (state.isOutOfRange != !isInRange) {
+            state = state.copyWith(isOutOfRange: !isInRange);
+          }
+        }
+      } catch (e) {
+        print('Error checking location: $e');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _messagesSubscription?.cancel();
+    _typingSubscription?.cancel();
+    _typingTimer?.cancel();
+    _recordingTimer?.cancel();
+    _locationCheckTimer?.cancel();
+    _messageController.dispose();
+    _scrollController.dispose();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
+    
+    if (_hasJoinedRoom) {
+      _chatService.updateParticipantCount(_chatRoomId, -1);
+    }
+    
+    super.dispose();
+  }
 
   Future<void> sendMessage(String content) async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to send messages."
+      );
+      return;
+    }
+    
     try {
       await _chatService.sendMessage(
-        _chatRoomId,
-        content,
-        MessageType.text,
+        chatRoomId: _chatRoomId,
+        senderId: _userService.currentUserId,
+        content: content,
+        type: MessageType.text,
       );
+      
+      await _chatService.updateRoomActivity(_chatRoomId);
     } catch (e) {
       state = state.copyWith(error: e.toString());
     }
   }
 
   Future<void> sendImage(File file) async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to send messages."
+      );
+      return;
+    }
+    
     try {
       final path = 'chat_images/${_chatRoomId}/${DateTime.now().millisecondsSinceEpoch}.jpg';
       final downloadUrl = await _storageService.uploadFile(
@@ -160,9 +227,10 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
       );
       
       await _chatService.sendMessage(
-        _chatRoomId,
-        downloadUrl,
-        MessageType.image,
+        chatRoomId: _chatRoomId,
+        senderId: _userService.currentUserId,
+        content: downloadUrl,
+        type: MessageType.image,
       );
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -170,6 +238,13 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   }
 
   Future<void> sendFile(File file) async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to send messages."
+      );
+      return;
+    }
+    
     try {
       final path = 'chat_files/${_chatRoomId}/${DateTime.now().millisecondsSinceEpoch}';
       final downloadUrl = await _storageService.uploadFile(
@@ -179,9 +254,10 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
       );
       
       await _chatService.sendMessage(
-        _chatRoomId,
-        downloadUrl,
-        MessageType.file,
+        chatRoomId: _chatRoomId,
+        senderId: _userService.currentUserId,
+        content: downloadUrl,
+        type: MessageType.file,
         metadata: {
           'fileName': file.path.split('/').last,
           'fileSize': file.lengthSync().toString(),
@@ -193,6 +269,13 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   }
 
   Future<void> sendAudio(File file) async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to send messages."
+      );
+      return;
+    }
+    
     try {
       final path = 'chat_audio/${_chatRoomId}/${DateTime.now().millisecondsSinceEpoch}.m4a';
       final downloadUrl = await _storageService.uploadFile(
@@ -202,9 +285,10 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
       );
       
       await _chatService.sendMessage(
-        _chatRoomId,
-        downloadUrl,
-        MessageType.audio,
+        chatRoomId: _chatRoomId,
+        senderId: _userService.currentUserId,
+        content: downloadUrl,
+        type: MessageType.audio,
       );
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -212,11 +296,19 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   }
 
   Future<void> sendLocation(String location) async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to send messages."
+      );
+      return;
+    }
+    
     try {
       await _chatService.sendMessage(
-        _chatRoomId,
-        location,
-        MessageType.location,
+        chatRoomId: _chatRoomId,
+        senderId: _userService.currentUserId,
+        content: location,
+        type: MessageType.location,
       );
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -224,11 +316,20 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   }
 
   Future<void> sendContact(Map<String, dynamic> contact) async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to send messages."
+      );
+      return;
+    }
+    
     try {
+      final phone = contact['phone'] as String;
       await _chatService.sendMessage(
-        _chatRoomId,
-        contact['phone'],
-        MessageType.contact,
+        chatRoomId: _chatRoomId,
+        senderId: _userService.currentUserId,
+        content: phone,
+        type: MessageType.contact,
         metadata: contact,
       );
     } catch (e) {
@@ -237,7 +338,7 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   }
 
   void setTyping(bool isTyping) {
-    _chatService.setTyping(_chatRoomId, isTyping);
+    _chatService.setTyping(_chatRoomId, _userService.currentUserId, isTyping);
   }
 
   void toggleEmojiPicker() {
@@ -258,12 +359,19 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   }
 
   void startRecording() async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to record audio."
+      );
+      return;
+    }
+    
     try {
       if (await _audioRecorder.hasPermission()) {
         await _audioRecorder.start();
         state = state.copyWith(isRecording: true);
         _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          _recordingDuration += const Duration(seconds: 1);
+          // Recording duration tracked by timer - handled in UI
         });
       }
     } catch (e) {
@@ -272,6 +380,13 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
   }
 
   Future<void> stopRecording() async {
+    if (state.isOutOfRange) {
+      state = state.copyWith(
+        error: "You're out of range of this chat. Please move closer to record audio."
+      );
+      return;
+    }
+    
     try {
       final path = await _audioRecorder.stop();
       _recordingTimer?.cancel();
@@ -282,28 +397,15 @@ class ChatScreenNotifier extends StateNotifier<ChatScreenState> {
 
       if (path != null) {
         await _chatService.sendMediaMessage(
-          _chatRoomId,
-          _userService.currentUserId,
-          path,
-          MessageType.audio,
+          chatRoomId: _chatRoomId,
+          senderId: _userService.currentUserId,
+          filePath: path,
+          type: MessageType.audio,
         );
       }
     } catch (e) {
       state = state.copyWith(error: 'Failed to stop recording: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    _messagesSubscription?.cancel();
-    _typingSubscription?.cancel();
-    _messageController.dispose();
-    _scrollController.dispose();
-    _typingTimer?.cancel();
-    _recordingTimer?.cancel();
-    _audioRecorder.dispose();
-    _audioPlayer.dispose();
-    super.dispose();
   }
 }
 
@@ -329,16 +431,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatScreenProvider(widget.chatRoom.id));
@@ -346,44 +438,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: StreamBuilder<User>(
-          stream: ref.read(userServiceProvider).streamUser(
-            widget.chatRoom.participants.firstWhere(
-              (id) => id != ref.read(userServiceProvider).currentUserId,
-            ),
-          ),
-          builder: (context, snapshot) {
-            final user = snapshot.data;
-            return Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundImage: user?.photoUrl != null
-                      ? CachedNetworkImageProvider(user!.photoUrl!)
-                      : null,
-                  child: user?.photoUrl == null
-                      ? Text(user?.initials ?? '?')
-                      : null,
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.chatRoom.displayName),
-                    if (user?.isOnline ?? false)
-                      const Text(
-                        'Online',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
+        title: Text(widget.chatRoom.name),
         actions: [
           IconButton(
             icon: const Icon(Icons.video_call),
@@ -524,4 +579,4 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
   }
-}
+} 

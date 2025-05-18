@@ -1,0 +1,181 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '16.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# Set environment variables to influence build process
+ENV['OTHER_CFLAGS'] = '-w -Wno-format -Wno-everything -DOPENSSL_NO_ASM=1 -D__attribute__(x)='
+ENV['OTHER_CXXFLAGS'] = '-w -Wno-format -Wno-everything -DOPENSSL_NO_ASM=1 -D__attribute__(x)='
+ENV['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+ENV['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+ENV['DEAD_CODE_STRIPPING'] = 'NO'
+ENV['DEBUG'] = 'NO'
+ENV['USE_HEADERMAP'] = 'NO'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+# Add source repositories
+source 'https://github.com/CocoaPods/Specs.git'
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  # Let Flutter determine the right version of Firebase packages
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+# Fix static framework linkage issues
+pre_install do |installer|
+  # workaround for https://github.com/CocoaPods/CocoaPods/issues/3289
+  Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
+  
+  puts "Creating custom compiler settings..."
+  installer.pod_targets.each do |pod|
+    if pod.name == 'BoringSSL-GRPC' || pod.name.include?('gRPC')
+      puts "Found target: #{pod.name} - applying fixes"
+      def pod.build_type;
+        # Force static library for BoringSSL/gRPC
+        Pod::BuildType.static_library
+      end
+    end
+  end
+end
+
+post_install do |installer|
+  # Fix Swift version and Bitcode settings
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['SWIFT_VERSION'] = '5.0'
+    config.build_settings['ENABLE_BITCODE'] = 'NO'
+  end
+  
+  # Path all source files with format attributes
+  boringssl_dir = installer.sandbox.pod_dir('BoringSSL-GRPC')
+  if boringssl_dir && File.directory?(boringssl_dir)
+    puts "Patching BoringSSL-GRPC source files..."
+    
+    # Find all header files with format attributes
+    format_files = Dir.glob("#{boringssl_dir}/**/*.h").select do |file|
+      File.read(file).include?('__format__')
+    end
+    
+    format_files.each do |file|
+      puts "Patching #{file}..."
+      
+      # Create backup
+      FileUtils.cp(file, "#{file}.backup") unless File.exist?("#{file}.backup")
+      
+      # Replace format attributes in the file
+      content = File.read(file)
+      content.gsub!(/__attribute__\(\(__format__[^)]*\)\)/, '')
+      
+      # Add our custom header include after the first include
+      unless content.include?('boringssl_fix.h')
+        content.sub!(/^(#include .*)$/, "\\1\n#include \"#{Dir.pwd}/headers/boringssl_fix.h\"")
+      end
+      
+      File.write(file, content)
+    end
+    
+    # Directly patch base.h which contains the format macro definitions
+    base_h = File.join(boringssl_dir, 'src', 'include', 'openssl', 'base.h')
+    if File.exist?(base_h)
+      puts "Patching base.h directly..."
+      
+      content = File.read(base_h)
+      # Remove the OPENSSL_PRINTF_FORMAT_FUNC definition
+      content.gsub!(/^#define OPENSSL_PRINTF_FORMAT_FUNC.*$/, '#define OPENSSL_PRINTF_FORMAT_FUNC(string_index, first_to_check)')
+      # Write the modified content
+      File.write(base_h, content)
+    end
+  end
+  
+  # Configure all target build settings
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      # Ensure minimum deployment target
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+      
+      # Add preprocessor definitions to disable printf format attributes
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'OPENSSL_NO_ASM=1'
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << '__attribute__(x)='
+      
+      # Strip all flags with G
+      ['OTHER_CFLAGS', 'OTHER_CXXFLAGS', 'COMPILER_FLAGS', 'WARNING_CFLAGS'].each do |flag_key|
+        if config.build_settings[flag_key].kind_of?(Array)
+          config.build_settings[flag_key] = config.build_settings[flag_key].reject { |flag| flag.include?('-G') }
+        elsif config.build_settings[flag_key].kind_of?(String)
+          config.build_settings[flag_key] = config.build_settings[flag_key].gsub(/-G\S*/, '')
+        end
+      end
+      
+      # Specifically fix BoringSSL-GRPC and gRPC related targets
+      if target.name == 'BoringSSL-GRPC' || target.name.include?('gRPC')
+        puts "Applying special configuration for #{target.name}"
+        
+        # Disable all warnings
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+        config.build_settings['CLANG_WARN_DOCUMENTATION_COMMENTS'] = 'NO'
+        config.build_settings['CLANG_WARN_UNREACHABLE_CODE'] = 'NO'
+        config.build_settings['CLANG_WARN__DUPLICATE_METHOD_MATCH'] = 'NO'
+        config.build_settings['CLANG_WARN_UNGUARDED_AVAILABILITY'] = 'NO'
+        
+        # Set specific flags for BoringSSL/gRPC
+        config.build_settings['OTHER_CFLAGS'] = '-w -Wno-format -Wno-everything -DOPENSSL_NO_ASM=1 -D__attribute__(x)='
+        config.build_settings['OTHER_CXXFLAGS'] = '-w -Wno-format -Wno-everything -DOPENSSL_NO_ASM=1 -D__attribute__(x)='
+        
+        # Disable index store which can cache compiler flags
+        config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+        
+        # User header search paths to include our custom headers
+        config.build_settings['USER_HEADER_SEARCH_PATHS'] = ['$(PODS_ROOT)/BoringSSL-GRPC/src/include', "#{Dir.pwd}/headers"]
+        
+        # Add more compiler flags
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = [
+          '$(inherited)', 
+          'OPENSSL_NO_ASM=1', 
+          '__attribute__(x)=',
+          'OPENSSL_PRINTF_FORMAT(a,b)=',
+          'OPENSSL_PRINTF_FORMAT_FUNC(a,b)='
+        ]
+        
+        # Force static library
+        config.build_settings['MACH_O_TYPE'] = 'staticlib'
+      end
+      
+      # Additional global build settings
+      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+      config.build_settings['DEAD_CODE_STRIPPING'] = 'NO'
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+    end
+  end
+end

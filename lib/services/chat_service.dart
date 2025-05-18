@@ -7,10 +7,10 @@ import 'storage_service.dart';
 import 'notification_service.dart';
 import 'user_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/user.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'dart:convert';
+import 'dart:math' as Math;
 
 part 'chat_service.g.dart';
 
@@ -579,6 +579,389 @@ class ChatService {
           .toList();
     } catch (e) {
       throw Exception('Failed to get public groups: $e');
+    }
+  }
+
+  // Track typing status of users
+  Future<void> setTyping(String chatRoomId, String userId, bool isTyping) async {
+    try {
+      if (isTyping) {
+        await _db.child('typing/$chatRoomId/$userId').set(
+          DateTime.now().millisecondsSinceEpoch,
+        );
+      } else {
+        await _db.child('typing/$chatRoomId/$userId').remove();
+      }
+    } catch (e) {
+      throw Exception('Failed to update typing status: $e');
+    }
+  }
+
+  // Stream of typing users in a chat room
+  Stream<Set<String>> streamTypingUsers(String chatRoomId) {
+    return _db.child('typing/$chatRoomId').onValue.map((event) {
+      final Set<String> typingUsers = {};
+      if (event.snapshot.value != null) {
+        final Map<dynamic, dynamic> data =
+            event.snapshot.value as Map<dynamic, dynamic>;
+        
+        // Add all users who have typed in the last 5 seconds
+        final now = DateTime.now().millisecondsSinceEpoch;
+        data.forEach((userId, timestamp) {
+          if (now - (timestamp as int) < 5000) {
+            typingUsers.add(userId as String);
+          }
+        });
+      }
+      return typingUsers;
+    });
+  }
+
+  // Get all chat rooms near a specific location
+  Future<List<ChatRoom>> getNearbyRooms(double latitude, double longitude, double radiusKm) async {
+    try {
+      // Get all rooms from Firebase
+      final snapshot = await _db.child('rooms').get();
+      
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> data = snapshot.value as Map<dynamic, dynamic>;
+        final List<ChatRoom> rooms = [];
+        
+        // Process each room
+        data.forEach((key, value) {
+          final Map<String, dynamic> roomData = Map<String, dynamic>.from(value);
+          final room = ChatRoom(
+            id: key,
+            name: roomData['name'] ?? '',
+            description: roomData['description'] ?? '',
+            creatorId: roomData['creatorId'] ?? '',
+            createdAt: DateTime.parse(roomData['createdAt'] ?? DateTime.now().toIso8601String()),
+            latitude: roomData['latitude'] ?? 0.0,
+            longitude: roomData['longitude'] ?? 0.0,
+            radius: roomData['radius'] ?? 5.0, // Default 5km radius
+            participants: roomData['participants'] ?? 0,
+            isActive: roomData['isActive'] ?? true,
+            type: roomData['password'] != null ? ChatRoomType.private : ChatRoomType.public,
+          );
+          
+          // Only include active rooms
+          if (room.isActive) {
+            // Calculate distance between room center and user location
+            final distance = _calculateDistance(
+              latitude, longitude, room.latitude, room.longitude);
+            
+            // Check if user is within search radius of the room
+            if (distance <= radiusKm) {
+              rooms.add(room);
+            }
+          }
+        });
+        
+        // Sort by distance (closest first)
+        rooms.sort((a, b) {
+          final distA = _calculateDistance(latitude, longitude, a.latitude, a.longitude);
+          final distB = _calculateDistance(latitude, longitude, b.latitude, b.longitude);
+          return distA.compareTo(distB);
+        });
+        
+        return rooms;
+      }
+      
+      return [];
+    } catch (e) {
+      throw Exception('Failed to get nearby rooms: $e');
+    }
+  }
+  
+  // Calculate distance between two coordinates (Haversine formula)
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const double earthRadius = 6371; // km
+    final double dLat = _toRadians(lat2 - lat1);
+    final double dLon = _toRadians(lon2 - lon1);
+    
+    final double a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(_toRadians(lat1)) * Math.cos(_toRadians(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        
+    final double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadius * c;
+  }
+  
+  double _toRadians(double degree) {
+    return degree * (Math.pi / 180);
+  }
+
+  // Check and clean up expired or inactive chat rooms
+  Future<void> cleanupExpiredRooms() async {
+    try {
+      final snapshot = await _db.child('rooms').get();
+      
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> data = snapshot.value as Map<dynamic, dynamic>;
+        final List<String> roomsToRemove = [];
+        
+        final now = DateTime.now();
+        
+        data.forEach((key, value) {
+          final Map<String, dynamic> roomData = Map<String, dynamic>.from(value);
+          
+          // Check expiration date if it exists
+          if (roomData.containsKey('expiresAt')) {
+            final expiresAt = DateTime.parse(roomData['expiresAt']);
+            if (now.isAfter(expiresAt)) {
+              roomsToRemove.add(key);
+            }
+          }
+          
+          // Also check last activity time if it exists
+          if (roomData.containsKey('lastActivity')) {
+            final lastActivity = DateTime.parse(roomData['lastActivity']);
+            // If no activity for 24 hours, mark for removal
+            if (now.difference(lastActivity).inHours > 24) {
+              roomsToRemove.add(key);
+            }
+          }
+          
+          // Check participant count - remove if empty for more than 1 hour
+          if (roomData.containsKey('participants') && 
+              roomData['participants'] == 0 &&
+              roomData.containsKey('emptyTime')) {
+            final emptyTime = DateTime.parse(roomData['emptyTime']);
+            if (now.difference(emptyTime).inHours > 1) {
+              roomsToRemove.add(key);
+            }
+          }
+        });
+        
+        // Remove expired rooms
+        for (final roomId in roomsToRemove) {
+          await _db.child('rooms/$roomId').update({
+            'isActive': false,
+            'removedAt': now.toIso8601String(),
+          });
+          
+          // Keep the chat history but mark it as inactive
+          print('Marked room $roomId as inactive due to expiration or inactivity');
+        }
+      }
+    } catch (e) {
+      print('Error cleaning up expired rooms: $e');
+    }
+  }
+  
+  // Update the last activity time for a chat room
+  Future<void> updateRoomActivity(String roomId) async {
+    try {
+      await _db.child('rooms/$roomId').update({
+        'lastActivity': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('Error updating room activity: $e');
+    }
+  }
+  
+  // Update participant count when someone joins or leaves
+  Future<void> updateParticipantCount(String roomId, int delta) async {
+    try {
+      // Get current count
+      final snapshot = await _db.child('rooms/$roomId/participants').get();
+      int currentCount = 0;
+      
+      if (snapshot.exists) {
+        currentCount = snapshot.value as int;
+      }
+      
+      // Calculate new count and ensure it's not negative
+      int newCount = (currentCount + delta) < 0 ? 0 : currentCount + delta;
+      
+      // Update the count
+      await _db.child('rooms/$roomId').update({
+        'participants': newCount,
+      });
+      
+      // If room becomes empty, set the empty time
+      if (newCount == 0) {
+        await _db.child('rooms/$roomId').update({
+          'emptyTime': DateTime.now().toIso8601String(),
+        });
+      } else if (currentCount == 0 && newCount > 0) {
+        // If room was empty and now has participants, remove the empty time
+        await _db.child('rooms/$roomId').update({
+          'emptyTime': null,
+        });
+      }
+    } catch (e) {
+      print('Error updating participant count: $e');
+    }
+  }
+
+  // Get details for a single chat room
+  Future<ChatRoom?> getRoomDetails(String roomId) async {
+    try {
+      final snapshot = await _db.child('rooms/$roomId').get();
+      
+      if (snapshot.exists) {
+        final Map<String, dynamic> roomData = Map<String, dynamic>.from(
+          snapshot.value as Map);
+          
+        return ChatRoom(
+          id: roomId,
+          name: roomData['name'] ?? '',
+          description: roomData['description'] ?? '',
+          creatorId: roomData['creatorId'] ?? '',
+          createdAt: DateTime.parse(roomData['createdAt'] ?? DateTime.now().toIso8601String()),
+          latitude: roomData['latitude'] ?? 0.0,
+          longitude: roomData['longitude'] ?? 0.0,
+          radius: roomData['radius'] ?? 0.2, // Default to 200m radius
+          participants: roomData['participants'] ?? 0,
+          isActive: roomData['isActive'] ?? true,
+          type: roomData['password'] != null ? ChatRoomType.private : ChatRoomType.public,
+          allowAnonymous: roomData['allowAnonymous'] ?? false,
+          isNsfw: roomData['isNsfw'] ?? false,
+          expiresAt: roomData['expiresAt'] != null ? DateTime.parse(roomData['expiresAt']) : null,
+        );
+      }
+      
+      return null;
+    } catch (e) {
+      print('Error getting room details: $e');
+      return null;
+    }
+  }
+  
+  // Update chat room settings
+  Future<void> updateChatRoomSettings(String roomId, Map<String, dynamic> settings) async {
+    try {
+      await _db.child('rooms/$roomId').update(settings);
+      
+      // Update last activity timestamp
+      await _db.child('rooms/$roomId').update({
+        'lastActivity': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw Exception('Failed to update chat room settings: $e');
+    }
+  }
+  
+  // Deactivate a chat room (soft delete)
+  Future<void> deactivateChatRoom(String roomId) async {
+    try {
+      await _db.child('rooms/$roomId').update({
+        'isActive': false,
+        'deactivatedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw Exception('Failed to deactivate chat room: $e');
+    }
+  }
+  
+  // Report inappropriate content in a chat room
+  Future<void> reportChatRoom(String roomId, String reporterId, String reason) async {
+    try {
+      final reportId = _db.child('reports').push().key!;
+      
+      await _db.child('reports/$reportId').set({
+        'roomId': roomId,
+        'reporterId': reporterId,
+        'reason': reason,
+        'timestamp': DateTime.now().toIso8601String(),
+        'status': 'pending',
+      });
+    } catch (e) {
+      throw Exception('Failed to report chat room: $e');
+    }
+  }
+  
+  // Report an inappropriate message
+  Future<void> reportMessage(String roomId, String messageId, String reporterId, String reason) async {
+    try {
+      final reportId = _db.child('reports').push().key!;
+      
+      await _db.child('reports/$reportId').set({
+        'roomId': roomId,
+        'messageId': messageId,
+        'reporterId': reporterId,
+        'reason': reason,
+        'timestamp': DateTime.now().toIso8601String(),
+        'status': 'pending',
+      });
+      
+      // Mark the message as reported
+      await _db.child('messages/$roomId/$messageId').update({
+        'reported': true,
+        'reportCount': ServerValue.increment(1),
+      });
+    } catch (e) {
+      throw Exception('Failed to report message: $e');
+    }
+  }
+  
+  // Block a user from a chat room (for moderators only)
+  Future<void> blockUserFromRoom(String roomId, String userId, String blockedBy) async {
+    try {
+      await _db.child('rooms/$roomId/blockedUsers/$userId').set({
+        'blockedBy': blockedBy,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw Exception('Failed to block user from room: $e');
+    }
+  }
+  
+  // Check if a user is blocked from a chat room
+  Future<bool> isUserBlockedFromRoom(String roomId, String userId) async {
+    try {
+      final snapshot = await _db.child('rooms/$roomId/blockedUsers/$userId').get();
+      return snapshot.exists;
+    } catch (e) {
+      print('Error checking if user is blocked: $e');
+      return false;
+    }
+  }
+  
+  // Reset chat room expiration time (extends the life of the chat room)
+  Future<void> resetRoomExpiration(String roomId) async {
+    try {
+      // Set expiration to 24 hours from now
+      final newExpiresAt = DateTime.now().add(Duration(hours: 24)).toIso8601String();
+      
+      await _db.child('rooms/$roomId').update({
+        'expiresAt': newExpiresAt,
+        'lastActivity': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw Exception('Failed to reset room expiration: $e');
+    }
+  }
+  
+  // Get the list of active participants in a chat room
+  Future<List<String>> getActiveParticipants(String roomId) async {
+    try {
+      // Get users who sent a message in the last 10 minutes
+      final tenMinutesAgo = DateTime.now().subtract(Duration(minutes: 10)).millisecondsSinceEpoch;
+      
+      final snapshot = await _db
+          .child('messages/$roomId')
+          .orderByChild('timestamp')
+          .startAt(tenMinutesAgo)
+          .get();
+      
+      final Set<String> activeUsers = {};
+      
+      if (snapshot.exists) {
+        final Map<dynamic, dynamic> data = snapshot.value as Map<dynamic, dynamic>;
+        
+        data.forEach((key, value) {
+          final Map<String, dynamic> messageData = Map<String, dynamic>.from(value);
+          activeUsers.add(messageData['senderId'] as String);
+        });
+      }
+      
+      return activeUsers.toList();
+    } catch (e) {
+      print('Error getting active participants: $e');
+      return [];
     }
   }
 } 

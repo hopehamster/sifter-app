@@ -21,28 +21,7 @@ class AppUser with _$AppUser {
   // Private constructor needed by Freezed for getter implementations
   const AppUser._();
 
-  // Temporary fix for freezed generation issues
-  // The following getter implementations will be overridden by the generated code
-  // but are needed for compile-time checks
-  @override
-  String get id => throw UnimplementedError();
-  @override
-  String get email => throw UnimplementedError();
-  @override
-  String get displayName => throw UnimplementedError();
-  @override
-  String? get photoUrl => throw UnimplementedError();
-  @override
-  String? get bio => throw UnimplementedError();
-  @override
-  String? get username => throw UnimplementedError();
-  @override
-  bool get isOnline => throw UnimplementedError();
-  @override
-  DateTime? get lastSeen => throw UnimplementedError();
-  @override
-  Map<String, dynamic> get settings => throw UnimplementedError();
-
+  // Use freezed-generated fromJson factory
   factory AppUser.fromJson(Map<String, dynamic> json) => _$AppUserFromJson(json);
 }
 

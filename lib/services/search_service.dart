@@ -13,13 +13,17 @@ class SearchService {
   // Search users
   Future<QuerySnapshot> searchUsers(String query) async {
     try {
+      await _analytics.logEvent('search', parameters: {'query': query});
+      
       final results = await _database.searchUsers(query);
-      await _analytics.logSearch(query);
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_users_error',
-        errorMessage: e.toString(),
+      await _analytics.logEvent(
+        'error',
+        parameters: {
+          'location': 'search_service.searchUsers',
+          'error': e.toString()
+        }
       );
       rethrow;
     }
@@ -29,12 +33,15 @@ class SearchService {
   Future<QuerySnapshot> searchMessages(String roomId, String query) async {
     try {
       final results = await _database.searchMessages(roomId, query);
-      await _analytics.logSearch(query);
+      await _analytics.logSearch(searchTerm: query);
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_messages_error',
-        errorMessage: e.toString(),
+      await _analytics.logEvent(
+        'error',
+        parameters: {
+          'location': 'search_service.searchMessages',
+          'error': e.toString()
+        }
       );
       rethrow;
     }
@@ -43,17 +50,22 @@ class SearchService {
   // Search rooms
   Future<QuerySnapshot> searchRooms(String query) async {
     try {
+      await _analytics.logEvent('search', parameters: {'query': query});
+      
       final results = await _database.rooms
           .where('name', isGreaterThanOrEqualTo: query)
           .where('name', isLessThanOrEqualTo: query + '\uf8ff')
           .get();
 
-      await _analytics.logSearch(query);
+      await _analytics.logSearch(searchTerm: query);
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_rooms_error',
-        errorMessage: e.toString(),
+      await _analytics.logEvent(
+        'error',
+        parameters: {
+          'location': 'search_service.searchRooms',
+          'error': e.toString()
+        }
       );
       rethrow;
     }
@@ -75,10 +87,10 @@ class SearchService {
 
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_messages_by_type_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchMessagesByType',
+        'error': e.toString()
+      });
       rethrow;
     }
   }
@@ -105,10 +117,10 @@ class SearchService {
 
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_messages_by_date_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchMessagesByDateRange',
+        'error': e.toString()
+      });
       rethrow;
     }
   }
@@ -129,10 +141,10 @@ class SearchService {
 
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_messages_by_sender_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchMessagesBySender',
+        'error': e.toString()
+      });
       rethrow;
     }
   }
@@ -152,10 +164,10 @@ class SearchService {
 
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_messages_with_media_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchMessagesWithMedia',
+        'error': e.toString()
+      });
       rethrow;
     }
   }
@@ -176,10 +188,10 @@ class SearchService {
 
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_messages_with_links_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchMessagesWithLinks',
+        'error': e.toString()
+      });
       rethrow;
     }
   }
@@ -200,11 +212,90 @@ class SearchService {
 
       return results;
     } catch (e) {
-      await _analytics.logError(
-        error: 'search_messages_with_mentions_error',
-        errorMessage: e.toString(),
-      );
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchMessagesWithMentions',
+        'error': e.toString()
+      });
       rethrow;
+    }
+  }
+
+  // Additional search methods
+  Future<List<dynamic>> searchNearby(double latitude, double longitude, double radius) async {
+    try {
+      // Search logic here
+      await _analytics.logEvent('search_nearby', parameters: {
+        'latitude': latitude,
+        'longitude': longitude,
+        'radius': radius
+      });
+      return [];
+    } catch (e) {
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchNearby',
+        'error': e.toString()
+      });
+      rethrow;
+    }
+  }
+
+  Future<List<dynamic>> searchByTags(List<String> tags) async {
+    try {
+      // Search logic here
+      await _analytics.logEvent('search_by_tags', parameters: {
+        'tags': tags.join(',')
+      });
+      return [];
+    } catch (e) {
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchByTags',
+        'error': e.toString()
+      });
+      rethrow;
+    }
+  }
+
+  Future<List<dynamic>> searchByCategory(String category) async {
+    try {
+      // Search logic here
+      await _analytics.logEvent('search_by_category', parameters: {
+        'category': category
+      });
+      return [];
+    } catch (e) {
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.searchByCategory',
+        'error': e.toString()
+      });
+      rethrow;
+    }
+  }
+
+  Future<List<dynamic>> advancedSearch(Map<String, dynamic> filters) async {
+    try {
+      // Search logic here
+      await _analytics.logEvent('advanced_search', parameters: filters);
+      return [];
+    } catch (e) {
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.advancedSearch',
+        'error': e.toString()
+      });
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> recentSearches() async {
+    try {
+      // Search logic here
+      await _analytics.logEvent('recent_searches', parameters: {});
+      return [];
+    } catch (e) {
+      await _analytics.logEvent('error', parameters: {
+        'location': 'search_service.recentSearches',
+        'error': e.toString()
+      });
+      return [];
     }
   }
 } 

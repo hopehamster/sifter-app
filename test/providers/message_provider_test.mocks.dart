@@ -3,14 +3,13 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i5;
-import 'dart:io' as _i7;
+import 'dart:async' as _i4;
+import 'dart:io' as _i6;
 
-import 'package:cloud_firestore/cloud_firestore.dart' as _i2;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i6;
-import 'package:sifter/models/message.dart' as _i3;
-import 'package:sifter/services/message_service.dart' as _i4;
+import 'package:mockito/src/dummies.dart' as _i5;
+import 'package:sifter/models/message.dart' as _i2;
+import 'package:sifter/services/message_service.dart' as _i3;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -26,33 +25,21 @@ import 'package:sifter/services/message_service.dart' as _i4;
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
 
-class _FakeQuerySnapshot_0<T extends Object?> extends _i1.SmartFake
-    implements _i2.QuerySnapshot<T> {
-  _FakeQuerySnapshot_0(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _FakeDocumentSnapshot_1<T extends Object?> extends _i1.SmartFake
-    implements _i2.DocumentSnapshot<T> {
-  _FakeDocumentSnapshot_1(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _FakeMessage_2 extends _i1.SmartFake implements _i3.Message {
-  _FakeMessage_2(Object parent, Invocation parentInvocation)
+class _FakeMessage_0 extends _i1.SmartFake implements _i2.Message {
+  _FakeMessage_0(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
 /// A class which mocks [MessageService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockMessageService extends _i1.Mock implements _i4.MessageService {
+class MockMessageService extends _i1.Mock implements _i3.MessageService {
   MockMessageService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i5.Future<String> sendTextMessage({
+  _i4.Future<String> sendTextMessage({
     required String? roomId,
     required String? senderId,
     required String? text,
@@ -65,8 +52,8 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               #text: text,
               #replyToMessageId: replyToMessageId,
             }),
-            returnValue: _i5.Future<String>.value(
-              _i6.dummyValue<String>(
+            returnValue: _i4.Future<String>.value(
+              _i5.dummyValue<String>(
                 this,
                 Invocation.method(#sendTextMessage, [], {
                   #roomId: roomId,
@@ -77,13 +64,13 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               ),
             ),
           )
-          as _i5.Future<String>);
+          as _i4.Future<String>);
 
   @override
-  _i5.Future<String> sendImageMessage({
+  _i4.Future<String> sendImageMessage({
     required String? roomId,
     required String? senderId,
-    required _i7.File? imageFile,
+    required _i6.File? imageFile,
     String? caption,
     String? replyToMessageId,
   }) =>
@@ -95,8 +82,8 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               #caption: caption,
               #replyToMessageId: replyToMessageId,
             }),
-            returnValue: _i5.Future<String>.value(
-              _i6.dummyValue<String>(
+            returnValue: _i4.Future<String>.value(
+              _i5.dummyValue<String>(
                 this,
                 Invocation.method(#sendImageMessage, [], {
                   #roomId: roomId,
@@ -108,13 +95,13 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               ),
             ),
           )
-          as _i5.Future<String>);
+          as _i4.Future<String>);
 
   @override
-  _i5.Future<String> sendFileMessage({
+  _i4.Future<String> sendFileMessage({
     required String? roomId,
     required String? senderId,
-    required _i7.File? file,
+    required _i6.File? file,
     String? caption,
     String? replyToMessageId,
   }) =>
@@ -126,8 +113,8 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               #caption: caption,
               #replyToMessageId: replyToMessageId,
             }),
-            returnValue: _i5.Future<String>.value(
-              _i6.dummyValue<String>(
+            returnValue: _i4.Future<String>.value(
+              _i5.dummyValue<String>(
                 this,
                 Invocation.method(#sendFileMessage, [], {
                   #roomId: roomId,
@@ -139,123 +126,97 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               ),
             ),
           )
-          as _i5.Future<String>);
+          as _i4.Future<String>);
 
   @override
-  _i5.Future<void> deleteMessage(String? messageId) =>
+  _i4.Future<void> deleteMessage(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteMessage, [messageId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> editMessage(String? messageId, String? newText) =>
+  _i4.Future<void> editMessage(String? messageId, String? newText) =>
       (super.noSuchMethod(
             Invocation.method(#editMessage, [messageId, newText]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> markMessageAsRead(String? messageId) =>
+  _i4.Future<void> markMessageAsRead(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#markMessageAsRead, [messageId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Stream<_i2.QuerySnapshot<Object?>> getMessages(String? roomId) =>
+  _i4.Stream<dynamic> getMessages(String? roomId) =>
       (super.noSuchMethod(
             Invocation.method(#getMessages, [roomId]),
-            returnValue: _i5.Stream<_i2.QuerySnapshot<Object?>>.empty(),
+            returnValue: _i4.Stream<dynamic>.empty(),
           )
-          as _i5.Stream<_i2.QuerySnapshot<Object?>>);
+          as _i4.Stream<dynamic>);
 
   @override
-  _i5.Future<_i2.QuerySnapshot<Object?>> getInitialMessages(
-    String? roomId,
-    int? limit,
-  ) =>
+  _i4.Future<dynamic> getInitialMessages(String? roomId, int? limit) =>
       (super.noSuchMethod(
             Invocation.method(#getInitialMessages, [roomId, limit]),
-            returnValue: _i5.Future<_i2.QuerySnapshot<Object?>>.value(
-              _FakeQuerySnapshot_0<Object?>(
-                this,
-                Invocation.method(#getInitialMessages, [roomId, limit]),
-              ),
-            ),
+            returnValue: _i4.Future<dynamic>.value(),
           )
-          as _i5.Future<_i2.QuerySnapshot<Object?>>);
+          as _i4.Future<dynamic>);
 
   @override
-  _i5.Future<_i2.QuerySnapshot<Object?>> getMoreMessages(
+  _i4.Future<dynamic> getMoreMessages(
     String? roomId,
-    _i2.DocumentSnapshot<Object?>? lastDoc,
+    dynamic lastDoc,
     int? limit,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getMoreMessages, [roomId, lastDoc, limit]),
-            returnValue: _i5.Future<_i2.QuerySnapshot<Object?>>.value(
-              _FakeQuerySnapshot_0<Object?>(
-                this,
-                Invocation.method(#getMoreMessages, [roomId, lastDoc, limit]),
-              ),
-            ),
+            returnValue: _i4.Future<dynamic>.value(),
           )
-          as _i5.Future<_i2.QuerySnapshot<Object?>>);
+          as _i4.Future<dynamic>);
 
   @override
-  _i5.Future<_i2.QuerySnapshot<Object?>> searchMessages(
-    String? roomId,
-    String? query,
-  ) =>
+  _i4.Future<dynamic> searchMessages(String? roomId, String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchMessages, [roomId, query]),
-            returnValue: _i5.Future<_i2.QuerySnapshot<Object?>>.value(
-              _FakeQuerySnapshot_0<Object?>(
-                this,
-                Invocation.method(#searchMessages, [roomId, query]),
-              ),
-            ),
+            returnValue: _i4.Future<dynamic>.value(),
           )
-          as _i5.Future<_i2.QuerySnapshot<Object?>>);
+          as _i4.Future<dynamic>);
 
   @override
-  _i5.Future<_i2.DocumentSnapshot<Object?>> getMessage(String? messageId) =>
+  _i4.Future<dynamic> getMessage(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#getMessage, [messageId]),
-            returnValue: _i5.Future<_i2.DocumentSnapshot<Object?>>.value(
-              _FakeDocumentSnapshot_1<Object?>(
-                this,
-                Invocation.method(#getMessage, [messageId]),
-              ),
-            ),
+            returnValue: _i4.Future<dynamic>.value(),
           )
-          as _i5.Future<_i2.DocumentSnapshot<Object?>>);
+          as _i4.Future<dynamic>);
 
   @override
-  _i5.Future<List<_i3.Message>> getMessageReplies(String? messageId) =>
+  _i4.Future<List<_i2.Message>> getMessageReplies(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#getMessageReplies, [messageId]),
-            returnValue: _i5.Future<List<_i3.Message>>.value(<_i3.Message>[]),
+            returnValue: _i4.Future<List<_i2.Message>>.value(<_i2.Message>[]),
           )
-          as _i5.Future<List<_i3.Message>>);
+          as _i4.Future<List<_i2.Message>>);
 
   @override
-  _i5.Future<int> getMessageReplyCount(String? messageId) =>
+  _i4.Future<int> getMessageReplyCount(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#getMessageReplyCount, [messageId]),
-            returnValue: _i5.Future<int>.value(0),
+            returnValue: _i4.Future<int>.value(0),
           )
-          as _i5.Future<int>);
+          as _i4.Future<int>);
 
   @override
-  _i5.Future<String> sendReply({
+  _i4.Future<String> sendReply({
     required String? roomId,
     required String? senderId,
     required String? text,
@@ -268,8 +229,8 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               #text: text,
               #parentMessageId: parentMessageId,
             }),
-            returnValue: _i5.Future<String>.value(
-              _i6.dummyValue<String>(
+            returnValue: _i4.Future<String>.value(
+              _i5.dummyValue<String>(
                 this,
                 Invocation.method(#sendReply, [], {
                   #roomId: roomId,
@@ -280,76 +241,76 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               ),
             ),
           )
-          as _i5.Future<String>);
+          as _i4.Future<String>);
 
   @override
-  _i5.Future<void> pinMessage(String? messageId) =>
+  _i4.Future<void> pinMessage(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#pinMessage, [messageId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> unpinMessage(String? messageId) =>
+  _i4.Future<void> unpinMessage(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#unpinMessage, [messageId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Stream<_i2.QuerySnapshot<Object?>> getPinnedMessages(String? roomId) =>
+  _i4.Stream<dynamic> getPinnedMessages(String? roomId) =>
       (super.noSuchMethod(
             Invocation.method(#getPinnedMessages, [roomId]),
-            returnValue: _i5.Stream<_i2.QuerySnapshot<Object?>>.empty(),
+            returnValue: _i4.Stream<dynamic>.empty(),
           )
-          as _i5.Stream<_i2.QuerySnapshot<Object?>>);
+          as _i4.Stream<dynamic>);
 
   @override
-  _i5.Future<void> addReaction(
+  _i4.Future<void> addReaction(
     String? messageId,
     String? emoji,
     String? userId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#addReaction, [messageId, emoji, userId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> removeReaction(
+  _i4.Future<void> removeReaction(
     String? messageId,
     String? emoji,
     String? userId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#removeReaction, [messageId, emoji, userId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<Map<String, List<String>>> getReactions(String? messageId) =>
+  _i4.Future<Map<String, List<String>>> getReactions(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#getReactions, [messageId]),
-            returnValue: _i5.Future<Map<String, List<String>>>.value(
+            returnValue: _i4.Future<Map<String, List<String>>>.value(
               <String, List<String>>{},
             ),
           )
-          as _i5.Future<Map<String, List<String>>>);
+          as _i4.Future<Map<String, List<String>>>);
 
   @override
-  _i5.Future<_i3.Message> createMessage({
+  _i4.Future<_i2.Message> createMessage({
     required String? chatRoomId,
     required String? senderId,
     required String? content,
-    required _i3.MessageType? type,
+    required _i2.MessageType? type,
     required int? timestamp,
     String? replyToMessageId,
     Map<String, dynamic>? metadata,
@@ -364,8 +325,8 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               #replyToMessageId: replyToMessageId,
               #metadata: metadata,
             }),
-            returnValue: _i5.Future<_i3.Message>.value(
-              _FakeMessage_2(
+            returnValue: _i4.Future<_i2.Message>.value(
+              _FakeMessage_0(
                 this,
                 Invocation.method(#createMessage, [], {
                   #chatRoomId: chatRoomId,
@@ -379,50 +340,50 @@ class MockMessageService extends _i1.Mock implements _i4.MessageService {
               ),
             ),
           )
-          as _i5.Future<_i3.Message>);
+          as _i4.Future<_i2.Message>);
 
   @override
-  _i5.Future<void> updateMessage(_i3.Message? message) =>
+  _i4.Future<void> updateMessage(_i2.Message? message) =>
       (super.noSuchMethod(
             Invocation.method(#updateMessage, [message]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> markAsRead(String? messageId, String? userId) =>
+  _i4.Future<void> markAsRead(String? messageId, String? userId) =>
       (super.noSuchMethod(
             Invocation.method(#markAsRead, [messageId, userId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> markAsDelivered(String? messageId, String? userId) =>
+  _i4.Future<void> markAsDelivered(String? messageId, String? userId) =>
       (super.noSuchMethod(
             Invocation.method(#markAsDelivered, [messageId, userId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> forwardMessage(String? messageId, String? targetRoomId) =>
+  _i4.Future<void> forwardMessage(String? messageId, String? targetRoomId) =>
       (super.noSuchMethod(
             Invocation.method(#forwardMessage, [messageId, targetRoomId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 
   @override
-  _i5.Future<void> deleteAllMessages(String? roomId) =>
+  _i4.Future<void> deleteAllMessages(String? roomId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteAllMessages, [roomId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
           )
-          as _i5.Future<void>);
+          as _i4.Future<void>);
 }

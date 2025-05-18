@@ -3,14 +3,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:link_preview_generator/link_preview_generator.dart';
 import '../models/message.dart';
 import '../models/user.dart';
-import '../services/user_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/message_service.dart';
 import 'reaction_widget.dart';
-import '../providers/app_providers.dart';
+import '../providers/riverpod/user_provider.dart';
+import 'package:timeago/timeago.dart' as timeago;
 
 class MessageBubble extends ConsumerStatefulWidget {
   final Message message;
@@ -103,8 +101,9 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = ref.watch(userProvider);
+    final currentUser = ref.watch(userNotifierProvider);
     final String currentUserId = currentUser.value?.id ?? '';
+    final time = DateTime.fromMillisecondsSinceEpoch(widget.message.timestamp);
     
     return GestureDetector(
       onTap: widget.onTap,
@@ -119,7 +118,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 if (!widget.isMe) ...[
-                  StreamBuilder<User>(
+                  StreamBuilder<AppUser>(
                     stream: ref.read(userServiceProvider).streamUser(widget.message.senderId),
                     builder: (context, snapshot) {
                       final user = snapshot.data;
@@ -149,13 +148,20 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withAlpha(26),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: _buildMessageContent(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildMessageContent(context),
+                        const SizedBox(height: 4.0),
+                        _buildTimestamp(context),
+                      ],
+                    ),
                   ),
                 ),
                 if (widget.isMe) ...[
@@ -182,7 +188,7 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
     );
   }
 
-  Widget _buildMessageContent() {
+  Widget _buildMessageContent(BuildContext context) {
     switch (widget.message.type) {
       case MessageType.text:
         return Text(
@@ -344,6 +350,48 @@ class _MessageBubbleState extends ConsumerState<MessageBubble> {
               ? Colors.blue
               : Colors.grey,
         ),
+      ],
+    );
+  }
+
+  Widget _buildTimestamp(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          timeago.format(time),
+          style: TextStyle(
+            fontSize: 10.0,
+            color: widget.isMe ? Colors.white70 : Colors.black54,
+          ),
+        ),
+        if (widget.message.status == MessageStatus.sent && widget.isMe)
+          Padding(
+            padding: const EdgeInsets.only(left: 4.0),
+            child: Icon(
+              Icons.done,
+              size: 12.0,
+              color: widget.isMe ? Colors.white70 : Colors.black54,
+            ),
+          ),
+        if (widget.message.status == MessageStatus.delivered && widget.isMe)
+          Padding(
+            padding: const EdgeInsets.only(left: 4.0),
+            child: Icon(
+              Icons.done_all,
+              size: 12.0,
+              color: widget.isMe ? Colors.white70 : Colors.black54,
+            ),
+          ),
+        if (widget.message.status == MessageStatus.read && widget.isMe)
+          Padding(
+            padding: const EdgeInsets.only(left: 4.0),
+            child: Icon(
+              Icons.done_all,
+              size: 12.0,
+              color: Colors.blue[300],
+            ),
+          ),
       ],
     );
   }

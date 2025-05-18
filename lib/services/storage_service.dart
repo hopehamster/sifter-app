@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:sifter/services/analytics_service.dart';
+import 'mock_storage_service.dart';
 
 part 'storage_service.g.dart';
 
@@ -20,7 +20,7 @@ class StorageService {
   factory StorageService() => _instance;
   StorageService._internal();
 
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final MockStorageService _storage = MockStorageService();
   final AnalyticsService _analytics = AnalyticsService();
   final DefaultCacheManager _cacheManager = DefaultCacheManager();
 
@@ -148,7 +148,7 @@ class StorageService {
     }
   }
 
-  Future<List<Reference>> listFiles(String path) async {
+  Future<List<MockReference>> listFiles(String path) async {
     try {
       final result = await _storage.ref().child(path).listAll();
       return result.items;
@@ -285,5 +285,18 @@ class StorageService {
       );
       rethrow;
     }
+  }
+}
+
+// MockStorageService is a facade for the real MockFirebaseStorage in mock_storage_service.dart
+class MockStorageService {
+  final MockFirebaseStorage _storage = MockFirebaseStorage.instance;
+  
+  MockReference ref() {
+    return _storage.ref();
+  }
+  
+  MockReference refFromURL(String url) {
+    return _storage.refFromURL(url);
   }
 } 
