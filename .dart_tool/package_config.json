@@ -3,7 +3,7 @@
   "packages": [
     {
       "name": "_fe_analyzer_shared",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/_fe_analyzer_shared-80.0.0",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/_fe_analyzer_shared-76.0.0",
       "packageUri": "lib/",
       "languageVersion": "3.3"
     },
@@ -14,10 +14,22 @@
       "languageVersion": "2.18"
     },
     {
+      "name": "_macros",
+      "rootUri": "file:///Users/admin/flutter/bin/cache/dart-sdk/pkg/_macros",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "analyzer",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/analyzer-7.3.0",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/analyzer-6.11.0",
       "packageUri": "lib/",
       "languageVersion": "3.3"
+    },
+    {
+      "name": "analyzer_plugin",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/analyzer_plugin-0.11.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "ansicolor",
@@ -248,10 +260,16 @@
       "languageVersion": "3.1"
     },
     {
-      "name": "dart_style",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/dart_style-3.0.1",
+      "name": "custom_lint_core",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/custom_lint_core-0.6.10",
       "packageUri": "lib/",
-      "languageVersion": "3.4"
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "dart_style",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/dart_style-2.3.8",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "dbus",
@@ -657,7 +675,7 @@
     },
     {
       "name": "freezed",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/freezed-2.5.8",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/freezed-2.5.7",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     },
@@ -885,9 +903,9 @@
     },
     {
       "name": "json_serializable",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/json_serializable-6.9.5",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/json_serializable-6.9.0",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.5"
     },
     {
       "name": "just_audio",
@@ -966,6 +984,12 @@
       "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/lottie-2.7.0",
       "packageUri": "lib/",
       "languageVersion": "3.1"
+    },
+    {
+      "name": "macros",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/macros-0.1.3-main.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
     },
     {
       "name": "matcher",
@@ -1226,8 +1250,20 @@
       "languageVersion": "2.17"
     },
     {
+      "name": "riverpod_analyzer_utils",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/riverpod_analyzer_utils-0.5.6",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "riverpod_annotation",
       "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/riverpod_annotation-2.6.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
+    },
+    {
+      "name": "riverpod_generator",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/riverpod_generator-2.6.1",
       "packageUri": "lib/",
       "languageVersion": "2.17"
     },
@@ -1323,9 +1359,9 @@
     },
     {
       "name": "source_gen",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/source_gen-2.0.0",
+      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/source_gen-1.5.0",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.0"
     },
     {
       "name": "source_helper",
@@ -1658,7 +1694,7 @@
       "languageVersion": "3.0"
     }
   ],
-  "generated": "2025-05-18T08:06:40.139183Z",
+  "generated": "2025-05-18T08:43:46.958873Z",
   "generator": "pub",
   "generatorVersion": "3.7.2",
   "flutterRoot": "file:///Users/admin/flutter",

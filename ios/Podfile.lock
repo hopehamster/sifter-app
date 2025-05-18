@@ -253,6 +253,10 @@ DEPENDENCIES:
   - emoji_picker_flutter (from `.symlinks/plugins/emoji_picker_flutter/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - file_selector_ios (from `.symlinks/plugins/file_selector_ios/ios`)
+  - Firebase/Auth (= 10.12.0)
+  - Firebase/CoreOnly (= 10.12.0)
+  - Firebase/Database (= 10.12.0)
+  - Firebase/Messaging (= 10.12.0)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_database (from `.symlinks/plugins/firebase_database/ios`)
@@ -283,7 +287,7 @@ DEPENDENCIES:
   - workmanager (from `.symlinks/plugins/workmanager/ios`)
 
 SPEC REPOS:
-  https://github.com/CocoaPods/Specs.git:
+  trunk:
     - DKImagePickerController
     - DKPhotoGallery
     - Firebase
@@ -447,6 +451,6 @@ SPEC CHECKSUMS:
   webview_flutter_wkwebview: a4af96a051138e28e29f60101d094683b9f82188
   workmanager: 0afdcf5628bbde6924c21af7836fed07b42e30e6
 
-PODFILE CHECKSUM: 0518b25800ffe730e0c660c562a1822dcc8a4d90
+PODFILE CHECKSUM: f9c4a39259c7727188fa1497dcfc7dd16ea0ed82
 
 COCOAPODS: 1.16.2

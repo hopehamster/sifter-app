@@ -82,6 +82,7 @@ dev_dependencies:
     sdk: flutter
   mockito: ^5.4.2
   build_runner: ^2.4.6
+  riverpod_generator: ^2.3.5
   flutter_launcher_icons: ^0.13.1
   flutter_native_splash: ^2.3.2
   freezed: ^2.4.5

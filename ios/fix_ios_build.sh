@@ -1,3 +1,20 @@
+#!/bin/bash
+
+# Comprehensive fix script for iOS build issues
+echo "====================================================================="
+echo "                    Comprehensive iOS Fix Script                      "
+echo "====================================================================="
+
+# Step 1: Clean the workspace
+echo "[1/5] Cleaning workspace..."
+rm -rf Pods
+rm -f Podfile.lock
+rm -rf ~/Library/Developer/Xcode/DerivedData/*sifter*
+echo "✅ Workspace cleaned"
+
+# Step 2: Update the Podfile to use compatible versions
+echo "[2/5] Updating Podfile..."
+cat > Podfile << 'EOL'
 # Uncomment this line to define a global platform for your project
 platform :ios, '14.0'
 
@@ -46,7 +63,7 @@ end
 
 # Fix static framework linkage issues
 pre_install do |installer|
-  # Force older syntax validator
+  # Fix static framework linkage issues
   Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
   
   # Force build type for problematic targets
@@ -68,11 +85,8 @@ post_install do |installer|
     
     # Apply additional settings to all targets
     target.build_configurations.each do |config|
-      # Enable minimum deployment target
+      # Ensure minimum deployment target
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
-      
-      # Disable Bitcode as it's deprecated
-      config.build_settings['ENABLE_BITCODE'] = 'NO'
       
       # Disable all warnings
       config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
@@ -93,14 +107,40 @@ post_install do |installer|
           '__attribute__(...)=',
         ]
       end
-      
-      # Fix for FirebaseAuth
-      if target.name == 'FirebaseAuth'
-        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] += [
-          'FIRAuthAPINAME_FIX=1',
-        ]
-      end
     end
   end
 end
+EOL
+echo "✅ Podfile updated"
+
+# Step 3: Run Flutter pub get to update dependencies
+echo "[3/5] Running flutter pub get..."
+cd ..
+flutter pub get
+cd ios
+echo "✅ Dependencies updated"
+
+# Step 4: Install pods
+echo "[4/5] Installing pods..."
+pod install
+echo "✅ Pods installed"
+
+# Step 5: Create and apply patches for FIRFederatedAuthProvider.h
+echo "[5/5] Applying patches to Firebase Auth..."
+AUTH_FILE="Pods/FirebaseAuth/FirebaseAuth/Sources/Public/FirebaseAuth/FIRFederatedAuthProvider.h"
+if [ -f "$AUTH_FILE" ]; then
+  # Create backup
+  cp "$AUTH_FILE" "${AUTH_FILE}.backup"
+  
+  # Look for the FIRAuthCredentialCallback definition and ensure it has a comma
+  sed -i '' '36s/\*_Nullable credential$/\*_Nullable credential,/g' "$AUTH_FILE"
+  
+  echo "✅ Firebase Auth patched"
+else
+  echo "⚠️ FIRFederatedAuthProvider.h not found. Skipping patch."
+fi
+
+echo "====================================================================="
+echo "                  All fixes applied successfully!                     "
+echo "====================================================================="
+echo "You can now try building and running your app." 
