@@ -4,6 +4,7 @@
 # - Build job: Building APK and iOS app
 # - Deployment: Temporarily disabled until Firebase setup is complete
 # Last updated: 2024-03-19
+# Status: Enabled and ready to run
 
 name: CI
 
