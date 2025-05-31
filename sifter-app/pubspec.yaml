@@ -1,0 +1,83 @@
+name: sifter_app
+description: A geofenced location-based chat application
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Core Chat SDK
+  flutter_chat_ui: ^1.6.15
+  flutter_firebase_chat_core: ^1.6.7
+  flutter_chat_types: ^3.6.2
+
+  # Firebase (updated to latest versions)
+  firebase_core: ^3.13.1
+  firebase_auth: ^5.5.4
+  cloud_firestore: ^5.6.8
+  firebase_storage: ^12.3.8
+  firebase_messaging: ^15.1.8
+  firebase_analytics: ^11.4.2
+  firebase_crashlytics: ^4.1.8
+  firebase_database: ^11.2.0
+  
+  # State Management (from your architecture)
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # Location Services (from your architecture)
+  geolocator: ^10.1.0
+  google_maps_flutter: ^2.5.0
+  geocoding: ^2.1.1
+  
+  # Push Notifications (from your architecture)
+  flutter_local_notifications: ^16.2.0
+  
+  # Local Storage (from your architecture)
+  shared_preferences: ^2.2.2
+  hive: ^2.2.3
+  path_provider: ^2.1.1
+  
+  # UI Components (from your architecture)
+  cupertino_icons: ^1.0.6
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.0
+  
+  # Enhanced Reactions
+  emoji_picker_flutter: ^2.0.0
+  lottie: ^3.0.0
+  giphy_get: ^3.5.6
+  
+  # Utilities
+  uuid: ^4.2.1
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.8.1
+
+  # Security & Encryption
+  crypto: ^3.0.3
+
+  # Network
+  http: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  
+  # Code Generation
+  build_runner: ^2.4.7
+  riverpod_generator: ^2.3.9
+  freezed: ^2.4.5
+  json_serializable: ^6.7.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/reactions/
+    - assets/animations/ 
