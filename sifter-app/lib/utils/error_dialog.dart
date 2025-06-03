@@ -96,7 +96,7 @@ class ErrorSnackBar extends SnackBar {
     super.key,
     required dynamic error,
     VoidCallback? onRetry,
-    Duration super.duration = const Duration(seconds: 4),
+    super.duration = const Duration(seconds: 4),
   }) : super(
           content: Row(
             children: [

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'main_app_screen.dart';
 
@@ -11,51 +11,38 @@ class AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
-    final authService = ref.watch(authServiceProvider);
+    print('🔍 AuthGate: Building widget');
 
-    return authState.when(
-      data: (user) {
-        // Check both Firebase authentication and local guest mode
-        if (user != null || authService.isLocalGuest) {
-          // User is authenticated (Firebase) or in local guest mode, show main app
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        print('🔍 AuthGate: StreamBuilder called');
+        print('🔍 AuthGate: Connection state: ${snapshot.connectionState}');
+        print('🔍 AuthGate: Has data: ${snapshot.hasData}');
+        print('🔍 AuthGate: User: ${snapshot.data?.uid ?? 'null'}');
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          print('🔍 AuthGate: Showing loading screen');
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.hasData) {
+          final user = snapshot.data!;
+          print('🎉 AuthGate: User authenticated - UID: ${user.uid}');
+          print('🔍 AuthGate: User email: ${user.email ?? 'none'}');
+          print('🔍 AuthGate: User phone: ${user.phoneNumber ?? 'none'}');
+          print('🔍 AuthGate: Is anonymous: ${user.isAnonymous}');
+          print('🔍 AuthGate: Email verified: ${user.emailVerified}');
+          print('🔍 AuthGate: Navigating to MainAppScreen');
           return const MainAppScreen();
         } else {
-          // User is not authenticated, show login screen
+          print('🔍 AuthGate: No user authenticated, showing LoginScreen');
           return const LoginScreen();
         }
-      },
-      loading: () => const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      ),
-      error: (error, stackTrace) {
-        // Even if Firebase auth fails, check if we're in local guest mode
-        if (authService.isLocalGuest) {
-          return const MainAppScreen();
-        }
-
-        return Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                const SizedBox(height: 16),
-                Text('Authentication Error: $error'),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    // Refresh the auth state
-                    ref.invalidate(authStateProvider);
-                  },
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        );
       },
     );
   }

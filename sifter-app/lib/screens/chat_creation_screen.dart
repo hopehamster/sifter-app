@@ -20,10 +20,20 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
   int _currentStep = 0;
 
   // Location Selection (Step 1)
-  GoogleMapController? _mapController;
-  LatLng? _selectedLocation;
+  double? _latitude;
+  double? _longitude;
   double _selectedRadius = 100.0; // Default 100 meters
+  bool _isLoadingLocation = false;
+  bool _locationInitialized = false;
+  String? _locationError;
+
+  // Google Maps
+  GoogleMapController? _mapController;
   Set<Circle> _circles = {};
+  Set<Marker> _markers = {};
+  bool _mapError = false;
+  bool _showMap = true; // Make map standard - always visible
+  bool _useSimpleView = false; // Fallback to simple view if map fails
 
   // Chat Configuration (Step 2)
   final _formKey = GlobalKey<FormState>();
@@ -40,7 +50,17 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
   @override
   void initState() {
     super.initState();
-    _checkAuthenticationAndProceed();
+    print('🔍 ChatCreationScreen: initState() called');
+
+    // Set default location immediately - San Francisco
+    _latitude = 37.7749;
+    _longitude = -122.4194;
+
+    // Check authentication without any location stuff
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAuthentication();
+      _updateMapElements();
+    });
   }
 
   @override
@@ -49,105 +69,219 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
     _descriptionController.dispose();
     _passwordController.dispose();
     _pageController.dispose();
+
+    // Dispose map controller to free memory
+    _mapController?.dispose();
+
     super.dispose();
   }
 
-  Future<void> _checkAuthenticationAndProceed() async {
-    final authService = ref.read(authServiceProvider);
+  Future<void> _checkAuthentication() async {
+    print('🔍 ChatCreationScreen: _checkAuthentication() started');
 
-    // Check if user is anonymous (Entry Point #3)
-    if (authService.isAnonymousUser) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showCreateAccountDialog();
-      });
-    } else {
-      _getCurrentLocation();
+    try {
+      final authService = ref.read(authServiceProvider);
+      print('🔍 ChatCreationScreen: AuthService obtained');
+
+      if (authService.isAnonymousUser) {
+        print(
+            '🔍 ChatCreationScreen: User is anonymous, showing account creation dialog');
+        if (mounted) {
+          _showCreateAccountDialog();
+        }
+      } else {
+        print(
+            '🔍 ChatCreationScreen: User is authenticated, ready to create chat');
+        // User is authenticated, interface is ready to use
+      }
+    } catch (e) {
+      print('💥 ChatCreationScreen: Exception in _checkAuthentication: $e');
+      if (mounted) {
+        _showSnackBar('Authentication check failed: $e', isError: true);
+      }
+    }
+  }
+
+  Future<void> _useMyLocation() async {
+    print('🔍 ChatCreationScreen: _useMyLocation() called');
+
+    setState(() {
+      _isLoadingLocation = true;
+      _locationError = null;
+    });
+
+    try {
+      final locationService = ref.read(locationServiceProvider);
+
+      // Try initialization with 3-second timeout
+      final success = await Future.any([
+        locationService.initialize(),
+        Future.delayed(const Duration(seconds: 3), () => false)
+      ]);
+
+      if (!success) {
+        throw Exception('Location service initialization timed out');
+      }
+
+      // Try to get position with 2-second timeout
+      final position = await Future.any([
+        Future(() => locationService.currentPosition),
+        Future.delayed(const Duration(seconds: 2), () => null)
+      ]);
+
+      if (position != null && mounted) {
+        print(
+            '🔍 ChatCreationScreen: Got user location: ${position.latitude}, ${position.longitude}');
+        setState(() {
+          _latitude = position.latitude;
+          _longitude = position.longitude;
+          _isLoadingLocation = false;
+          _locationInitialized = true;
+        });
+
+        _updateMapElements();
+        _showSnackBar('Location updated to your current position!');
+      } else {
+        throw Exception('Could not get your current location');
+      }
+    } catch (e) {
+      print('🔍 ChatCreationScreen: Failed to get user location: $e');
+
+      if (mounted) {
+        setState(() {
+          _isLoadingLocation = false;
+          _locationError = 'Failed to get your location: $e';
+        });
+
+        _showSnackBar('Could not get your location. Using default location.',
+            isError: true);
+      }
     }
   }
 
   Future<void> _showCreateAccountDialog() async {
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Account Required'),
-        content: const Text(
-          'You need to have an account in order to make chats. Creating an account unlocks the ability to create chat rooms and access all features.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Back'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Create Account'),
-          ),
-        ],
-      ),
-    );
+    print('🔍 ChatCreationScreen: _showCreateAccountDialog() started');
 
-    if (!mounted) return;
-
-    if (result == true) {
-      // Navigate to account creation (Settings screen)
-      Navigator.of(context).pop(); // Close chat creation screen
-      // The main app will handle navigation to settings for account creation
-    } else {
-      // User chose to go back
-      Navigator.of(context).pop();
-    }
-  }
-
-  Future<void> _getCurrentLocation() async {
     try {
-      final locationService = ref.read(locationServiceProvider);
-      final position = locationService.currentPosition;
+      final result = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          print('🔍 ChatCreationScreen: Dialog builder called');
+          return AlertDialog(
+            title: const Text('Account Required'),
+            content: const Text(
+              'You need to have an account in order to make chats. Creating an account unlocks the ability to create chat rooms and access all features.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  print('🔍 ChatCreationScreen: User tapped Back in dialog');
+                  Navigator.of(context).pop(false);
+                },
+                child: const Text('Back'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  print(
+                      '🔍 ChatCreationScreen: User tapped Create Account in dialog');
+                  Navigator.of(context).pop(true);
+                },
+                child: const Text('Create Account'),
+              ),
+            ],
+          );
+        },
+      );
 
-      if (position != null && mounted) {
-        setState(() {
-          _selectedLocation = LatLng(position.latitude, position.longitude);
-          _updateCircle();
-        });
+      print('🔍 ChatCreationScreen: Dialog closed with result: $result');
 
-        // Move camera to current location
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(_selectedLocation!, 16.0),
-        );
+      if (!mounted) {
+        print('🔍 ChatCreationScreen: Widget not mounted, returning');
+        return;
       }
-    } catch (e) {
-      if (mounted) {
-        _showSnackBar('Failed to get current location: $e', isError: true);
+
+      if (result == true) {
+        print(
+            '🔍 ChatCreationScreen: User chose to create account, navigating back');
+        // Navigate to account creation (Settings screen)
+        Navigator.of(context).pop(); // Close chat creation screen
+        // The main app will handle navigation to settings for account creation
+      } else {
+        print('🔍 ChatCreationScreen: User chose to go back, navigating back');
+        // User chose to go back
+        Navigator.of(context).pop();
       }
+    } catch (e, stackTrace) {
+      print('💥 ChatCreationScreen: Exception in _showCreateAccountDialog: $e');
+      print('📚 ChatCreationScreen: Stack trace: $stackTrace');
     }
   }
 
-  void _updateCircle() {
-    if (_selectedLocation == null) return;
+  void _updateMapElements() {
+    if (_latitude == null || _longitude == null || !mounted) return;
 
-    setState(() {
-      _circles = {
-        Circle(
-          circleId: const CircleId('geofence'),
-          center: _selectedLocation!,
-          radius: _selectedRadius,
-          fillColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-          strokeColor: Theme.of(context).colorScheme.primary,
-          strokeWidth: 2,
-        ),
-      };
-    });
+    try {
+      final center = LatLng(_latitude!, _longitude!);
+
+      // Only update if we have a significant change to prevent excessive updates
+      if (_markers.isNotEmpty) {
+        final existingMarker = _markers.first;
+        final distance = _calculateDistance(
+          existingMarker.position.latitude,
+          existingMarker.position.longitude,
+          center.latitude,
+          center.longitude,
+        );
+        if (distance < 10) return; // Skip update if less than 10 meters change
+      }
+
+      setState(() {
+        // Update marker for center point (simplified)
+        _markers = {
+          Marker(
+            markerId: const MarkerId('center'),
+            position: center,
+            infoWindow: const InfoWindow(title: 'Chat Center'),
+          ),
+        };
+
+        // Update circle for radius (simplified)
+        _circles = {
+          Circle(
+            circleId: const CircleId('radius'),
+            center: center,
+            radius: _selectedRadius,
+            fillColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+            strokeColor: Theme.of(context).colorScheme.primary,
+            strokeWidth: 1,
+          ),
+        };
+      });
+    } catch (e) {
+      print('🔍 Error in _updateMapElements: $e');
+      // Don't crash if map elements can't be updated
+    }
+  }
+
+  double _calculateDistance(
+      double lat1, double lon1, double lat2, double lon2) {
+    const double earthRadius = 6371000; // Earth radius in meters
+    double dLat = (lat2 - lat1) * (3.14159 / 180);
+    double dLon = (lon2 - lon1) * (3.14159 / 180);
+    double a = (dLat / 2).abs() + (dLon / 2).abs();
+    return earthRadius * 2 * a;
   }
 
   void _onRadiusChanged(double radius) {
     setState(() {
       _selectedRadius = radius;
-      _updateCircle();
     });
+    _updateMapElements();
   }
 
   Future<void> _proceedToConfiguration() async {
-    if (_selectedLocation == null) {
+    if (_latitude == null || _longitude == null) {
       _showSnackBar('Current location not available', isError: true);
       return;
     }
@@ -169,7 +303,7 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
 
   Future<void> _createChatRoom() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedLocation == null) {
+    if (_latitude == null || _longitude == null) {
       _showSnackBar('Current location not available', isError: true);
       return;
     }
@@ -229,8 +363,8 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
         description: roomDescription,
         creatorId: currentUser.uid,
         creatorName: currentUser.displayName ?? 'Anonymous',
-        latitude: _selectedLocation!.latitude,
-        longitude: _selectedLocation!.longitude,
+        latitude: _latitude!,
+        longitude: _longitude!,
         radiusInMeters: _selectedRadius,
         isPasswordProtected: _isPasswordProtected,
         password: _isPasswordProtected ? _passwordController.text : null,
@@ -276,115 +410,263 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_currentStep == 0 ? 'Set Chat Radius' : 'Configure Chat'),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
+    try {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(_currentStep == 0 ? 'Set Chat Radius' : 'Configure Chat'),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          actions: [
+            if (_currentStep == 1)
+              TextButton(
+                onPressed: _goBackToLocation,
+                child: const Text('Back'),
+              ),
+          ],
         ),
-        actions: [
-          if (_currentStep == 1)
-            TextButton(
-              onPressed: _goBackToLocation,
-              child: const Text('Back'),
+        body: PageView(
+          controller: _pageController,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            _buildLocationSelection(),
+            _buildChatConfiguration(),
+          ],
+        ),
+      );
+    } catch (e, stackTrace) {
+      print('🔍 Error in ChatCreationScreen build: $e');
+      print('📚 Stack trace: $stackTrace');
+
+      // Return error screen instead of crashing
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Chat Creation'),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Something went wrong',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Unable to load the chat creation screen',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Go Back'),
+                ),
+              ],
             ),
-        ],
-      ),
-      body: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          _buildLocationSelection(),
-          _buildChatConfiguration(),
-        ],
-      ),
-    );
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildLocationSelection() {
     return Column(
       children: [
-        // Map
+        // Location Info Card
         Expanded(
-          child: Stack(
-            children: [
-              GoogleMap(
-                onMapCreated: (GoogleMapController controller) {
-                  _mapController = controller;
-                  if (_selectedLocation != null) {
-                    controller.animateCamera(
-                      CameraUpdate.newLatLngZoom(_selectedLocation!, 16.0),
-                    );
-                  }
-                },
-                initialCameraPosition: CameraPosition(
-                  target: _selectedLocation ??
-                      const LatLng(37.7749, -122.4194), // Default to SF
-                  zoom: 16.0,
-                ),
-                circles: _circles,
-                markers: _selectedLocation != null
-                    ? {
-                        Marker(
-                          markerId: const MarkerId('current_location'),
-                          position: _selectedLocation!,
-                          infoWindow: const InfoWindow(
-                              title: 'Your Location (Chat Center)'),
+          flex: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _locationInitialized
+                                  ? Icons.location_on
+                                  : Icons.location_city,
+                              color: _locationInitialized
+                                  ? Colors.green
+                                  : Theme.of(context).colorScheme.secondary,
+                              size: 32,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _locationInitialized
+                                        ? 'Your Location'
+                                        : 'Default Location',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                  ),
+                                  Text(
+                                    _locationInitialized
+                                        ? 'Chat center set to your current position'
+                                        : 'San Francisco, CA (Default)',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      }
-                    : {},
-                myLocationEnabled: true,
-                myLocationButtonEnabled: true,
-              ),
-
-              // Location Info Overlay
-              if (_selectedLocation != null)
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Your Current Location',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                        const SizedBox(height: 20),
+                        if (_locationError != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12.0),
+                            decoration: BoxDecoration(
+                              color:
+                                  Theme.of(context).colorScheme.errorContainer,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.warning,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onErrorContainer,
                                 ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Chat room center (fixed)',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _locationError!,
+                                    style: TextStyle(
                                       color: Theme.of(context)
                                           .colorScheme
-                                          .onSurfaceVariant,
+                                          .onErrorContainer,
                                     ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Lat: ${_selectedLocation!.latitude.toStringAsFixed(6)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          Text(
-                            'Lng: ${_selectedLocation!.longitude.toStringAsFixed(6)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          const SizedBox(height: 16),
                         ],
-                      ),
+                        Text(
+                          'Coordinates',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12.0),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  const Text('Latitude: '),
+                                  Text(
+                                    _latitude?.toStringAsFixed(6) ?? 'N/A',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Text('Longitude: '),
+                                  Text(
+                                    _longitude?.toStringAsFixed(6) ?? 'N/A',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed:
+                                _isLoadingLocation ? null : _useMyLocation,
+                            icon: _isLoadingLocation
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.my_location),
+                            label: Text(_isLoadingLocation
+                                ? 'Getting Location...'
+                                : 'Use My Current Location'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'You can use the default location or get your current position. Your chat room will be centered at this location.',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-            ],
+              ],
+            ),
+          ),
+        ),
+
+        // Map View
+        Expanded(
+          flex: 3,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Card(
+              clipBehavior: Clip.antiAlias,
+              child: _buildMapWidget(),
+            ),
           ),
         ),
 
@@ -429,7 +711,7 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Your chat room will be centered at your current location. Adjust the radius to determine how far from you people can join the conversation.',
+                'People can join your chat when they are within this radius of the center location.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context)
                           .colorScheme
@@ -441,16 +723,182 @@ class _ChatCreationScreenState extends ConsumerState<ChatCreationScreen> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: _selectedLocation != null
+                  onPressed: _latitude != null &&
+                          _longitude != null &&
+                          !_isLoadingLocation
                       ? _proceedToConfiguration
                       : null,
-                  child: const Text('Continue to Configuration'),
+                  child: _isLoadingLocation
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Continue to Configuration'),
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMapWidget() {
+    if (_latitude == null || _longitude == null) {
+      return Container(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_mapError || _useSimpleView) {
+      return Container(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.map_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _mapError ? 'Map failed to load' : 'Simple Location View',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Lat: ${_latitude!.toStringAsFixed(4)}, Lng: ${_longitude!.toStringAsFixed(4)}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontFamily: 'monospace',
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                'Radius: ${_selectedRadius.round()}m',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_mapError) ...[
+              OutlinedButton(
+                onPressed: () {
+                  setState(() {
+                    _mapError = false;
+                  });
+                },
+                child: const Text('Retry Map'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  _useSimpleView = !_useSimpleView;
+                  if (_useSimpleView) {
+                    _mapError = false;
+                  }
+                });
+              },
+              child: Text(_useSimpleView ? 'Show Map' : 'Use Simple View'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Wrap GoogleMap in multiple layers of error handling
+    return SafeArea(
+      child: Builder(
+        builder: (context) {
+          try {
+            return GoogleMap(
+              onMapCreated: (GoogleMapController controller) {
+                try {
+                  _mapController = controller;
+                  // Use a delay to ensure map is ready before updating elements
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) {
+                      _updateMapElements();
+                    }
+                  });
+                } catch (e) {
+                  print('🔍 Error in onMapCreated: $e');
+                  if (mounted) {
+                    setState(() {
+                      _mapError = true;
+                      _useSimpleView = true; // Auto-fallback to simple view
+                    });
+                  }
+                }
+              },
+              initialCameraPosition: CameraPosition(
+                target: LatLng(_latitude!, _longitude!),
+                zoom: 15.0, // Reduced zoom for better performance
+              ),
+              markers: _markers,
+              circles: _circles,
+              // Memory optimization settings
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
+              myLocationButtonEnabled: false,
+              myLocationEnabled: false,
+              compassEnabled: false,
+              rotateGesturesEnabled: false,
+              tiltGesturesEnabled: false,
+              buildingsEnabled: false,
+              trafficEnabled: false,
+              indoorViewEnabled: false,
+              mapType: MapType.normal,
+              onTap: (LatLng position) {
+                // Allow user to tap on map to change location
+                try {
+                  setState(() {
+                    _latitude = position.latitude;
+                    _longitude = position.longitude;
+                  });
+                  _updateMapElements();
+                } catch (e) {
+                  print('🔍 Error in onTap: $e');
+                }
+              },
+            );
+          } catch (e) {
+            print('🔍 Error creating GoogleMap: $e');
+            // If map creation fails, automatically switch to simple view
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  _mapError = true;
+                  _useSimpleView = true;
+                });
+              }
+            });
+            return Container(
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              child: const Center(
+                child: Text('Switching to simple view...'),
+              ),
+            );
+          }
+        },
+      ),
     );
   }
 

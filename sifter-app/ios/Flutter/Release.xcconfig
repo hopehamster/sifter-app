@@ -2,3 +2,4 @@
 #include "Generated.xcconfig"
 
 IPHONEOS_DEPLOYMENT_TARGET = 15.0
+OTHER_LDFLAGS = $(inherited) -framework UIKit -framework Foundation -framework CoreLocation -lsqlite3

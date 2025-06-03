@@ -237,12 +237,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
                     blurRadius: 20,
                     spreadRadius: 5,
-                    offset: const Offset(0, 10),
+                    offset: Offset(0, 10),
                   ),
                 ],
               ),
@@ -327,7 +327,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         ),
         borderRadius: BorderRadius.circular(24),
       ),
-      child: Center(
+      child: const Center(
         child: Text(
           'S',
           style: TextStyle(
@@ -338,7 +338,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               Shadow(
                 color: Colors.black26,
                 blurRadius: 4,
-                offset: const Offset(2, 2),
+                offset: Offset(2, 2),
               ),
             ],
           ),
@@ -366,7 +366,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             opacity: _textOpacity,
             child: Column(
               children: [
-                Text(
+                const Text(
                   'Sifter',
                   style: TextStyle(
                     fontSize: 36,
@@ -377,7 +377,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       Shadow(
                         color: Colors.black26,
                         blurRadius: 8,
-                        offset: const Offset(0, 4),
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
@@ -404,10 +404,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     return AnimatedBuilder(
       animation: _particleController,
       builder: (context, child) {
-        return Opacity(
+        return const Opacity(
           opacity: 0.7,
           child: CircularProgressIndicator(
-            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
             strokeWidth: 2,
           ),
         );

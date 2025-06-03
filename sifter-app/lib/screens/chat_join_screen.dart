@@ -21,7 +21,6 @@ class ChatJoinScreen extends ConsumerStatefulWidget {
 class _ChatJoinScreenState extends ConsumerState<ChatJoinScreen> {
   bool _isInitializing = true;
   String? _errorMessage;
-  int _currentIndex = 1; // Start with Chat Selection/Join tab (middle)
 
   // Video Ad Timer System (Task 1.4)
   Timer? _adTimer;
@@ -53,10 +52,10 @@ class _ChatJoinScreenState extends ConsumerState<ChatJoinScreen> {
           return;
         }
 
-        // Only count down when there are no eligible rooms AND user is on chat selection tab
+        // Only count down when there are no eligible rooms
         final hasRooms = eligibleRoomsAsync.value?.isNotEmpty ?? false;
-        if (hasRooms || _currentIndex != 1) {
-          // Reset timer when rooms become available or user switches tabs
+        if (hasRooms) {
+          // Reset timer when rooms become available
           setState(() {
             _adCountdown = 300;
             _showVideoAd = false;
@@ -117,13 +116,6 @@ class _ChatJoinScreenState extends ConsumerState<ChatJoinScreen> {
     }
   }
 
-  void _onBottomNavTap(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-    _onUserInteraction(); // Reset ad timer on tab switch
-  }
-
   Future<void> _navigateToCreateChat() async {
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
@@ -131,87 +123,61 @@ class _ChatJoinScreenState extends ConsumerState<ChatJoinScreen> {
       ),
     );
 
-    // If chat creation was successful, refresh the list and switch to selection tab
+    // If chat creation was successful, refresh the list
     if (result == true && mounted) {
       // ignore: unused_result
       ref.refresh(eligibleChatRoomsProvider);
-      setState(() {
-        _currentIndex = 1; // Switch back to Chat Selection/Join
-      });
     }
+  }
+
+  void _navigateToSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          // Main content area
+          Expanded(
+            child: _buildChatSelectionTab(),
+          ),
+          // Fixed advertisement banner at bottom
+          Container(
+            width: double.infinity,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              border: Border(
+                top: BorderSide(
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Center(
+              child: Text(
+                '🎯 Advertisement Banner',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _getCurrentPage() {
-    switch (_currentIndex) {
-      case 0: // Chat Creation
-        return _buildChatCreationTab();
-      case 1: // Chat Selection/Join
-        return _buildChatSelectionTab();
-      case 2: // Settings
-        return const SettingsScreen();
-      default:
-        return _buildChatSelectionTab();
-    }
-  }
-
-  Widget _buildChatCreationTab() {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Chat Room'),
-        automaticallyImplyLeading: false,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.add_circle_outline,
-                size: 120,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Create a New Chat Room',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Set up a location-based chat room for people in your area to join and connect.',
-                style: Theme.of(context).textTheme.bodyLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                onPressed: _navigateToCreateChat,
-                icon: const Icon(Icons.add),
-                label: const Text('Start Creating'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _currentIndex = 1; // Switch to Chat Selection/Join
-                  });
-                },
-                icon: const Icon(Icons.search),
-                label: const Text('Find Existing Rooms'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    // Removed - no longer needed since we're not using tabs
+    return _buildChatSelectionTab();
   }
 
   Widget _buildChatSelectionTab() {
@@ -220,6 +186,21 @@ class _ChatJoinScreenState extends ConsumerState<ChatJoinScreen> {
         appBar: AppBar(
           title: const Text('Sifter Chat'),
           automaticallyImplyLeading: false,
+          actions: [
+            // Settings gear icon
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: _navigateToSettings,
+              tooltip: 'Settings',
+            ),
+            // Create new chat plus icon
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _navigateToCreateChat,
+              tooltip: 'New Chat',
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
         body: const Center(
           child: Column(
@@ -239,6 +220,21 @@ class _ChatJoinScreenState extends ConsumerState<ChatJoinScreen> {
         appBar: AppBar(
           title: const Text('Sifter Chat'),
           automaticallyImplyLeading: false,
+          actions: [
+            // Settings gear icon
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: _navigateToSettings,
+              tooltip: 'Settings',
+            ),
+            // Create new chat plus icon
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _navigateToCreateChat,
+              tooltip: 'New Chat',
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
         body: Center(
           child: Column(
@@ -286,64 +282,24 @@ class _ChatJoinScreenState extends ConsumerState<ChatJoinScreen> {
               // ignore: unused_result
               ref.refresh(eligibleChatRoomsProvider);
             },
+            tooltip: 'Refresh',
           ),
+          // Settings gear icon
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _navigateToSettings,
+            tooltip: 'Settings',
+          ),
+          // Create new chat plus icon
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _navigateToCreateChat,
+            tooltip: 'New Chat',
+          ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        children: [
-          // Ad banner placeholder
-          Container(
-            height: 60,
-            width: double.infinity,
-            color: Colors.grey[200],
-            child: const Center(
-              child: Text(
-                'Ad Banner',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-          ),
-
-          // Chat rooms list
-          Expanded(
-            child: _buildChatRoomsList(),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToCreateChat,
-        tooltip: 'Create Chat Room',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: _getCurrentPage(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onBottomNavTap,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline),
-            activeIcon: Icon(Icons.add_circle),
-            label: 'Chat Creation',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: 'Chat Selection/Join',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
+      body: _buildChatRoomsList(),
     );
   }
 

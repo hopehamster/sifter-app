@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,12 +10,25 @@ import 'services/settings_service.dart';
 import 'services/analytics_service.dart';
 
 void main() async {
+  print('🚀 App starting...');
+
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    print('🔥 Initializing Firebase...');
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print('✅ Firebase initialized successfully');
+  } catch (e, stackTrace) {
+    print('💥 Firebase initialization failed: $e');
+    print('📚 Stack trace: $stackTrace');
+  }
+
+  // Enable verbose logging in debug mode
+  if (kDebugMode) {
+    print('🔍 Debug mode enabled - verbose logging active');
+  }
 
   // Initialize Firebase Chat Core
   FirebaseChatCore.instance.setConfig(
@@ -25,6 +39,7 @@ void main() async {
     ),
   );
 
+  print('🎯 Launching app...');
   runApp(
     const ProviderScope(
       child: SifterApp(),

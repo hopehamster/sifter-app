@@ -176,7 +176,7 @@ The app uses **bottom navigation as the primary navigation method** with three m
 
 2. **Chat Selection/Join Screen** (Tab 1 - DEFAULT)
    - **Core Function**: Display rooms user is **currently within geofence** of
-   - **Anonymous User Filtering**: Anonymous users only see rooms that have "Allow Anonymous Users" enabled
+   - **Guest User Filtering**: Guest users only see rooms that have "Allow Guest Users" enabled
    - **Real-time updates**: Rooms appear/disappear as user moves in/out of range
    - **Room Cards**: Show name, description preview, member count, distance, badges
    - **Tap Interaction**: Room card → Chat Preview Window
@@ -188,7 +188,7 @@ The app uses **bottom navigation as the primary navigation method** with three m
 
 3. **Settings Screen** (Tab 2)
    - **Registered Users**: Full profile management, account information editing (Email, Password, Username, Score), leaderboard access, notification settings, app preferences, and account management
-   - **Anonymous Users**: Minimal interface with display name setting, account creation option, and legal/support information
+   - **Guest Users**: Minimal interface with display name setting, account creation option, and legal/support information
    - Sign out option (registered users only)
    - Customer support and FAQs (all users)
 
@@ -199,47 +199,47 @@ The app uses **bottom navigation as the primary navigation method** with three m
      - Current member count and capacity
      - Distance from user and geofence radius
      - Password protection and NSFW indicators
-     - **Anonymous Access Indicator**: Shows if anonymous users are allowed
+     - **Guest Access Indicator**: Shows if guest users are allowed
    - **Action Buttons**:
      - Report Room (with detailed reporting categories)
      - Join Chat (handles password input if needed)
    - **Dismissal**: Drag down, back button, or complete action
 
-### Anonymous User Experience
+### Guest User Experience
 
 **Philosophy**: Allow quick chatting with minimal upfront hassle while encouraging account creation.
 
-**Anonymous User Capabilities**:
-- **Chat Access**: Can only join chat rooms that have "Allow Anonymous Users" toggle enabled
+**Guest User Capabilities**:
+- **Chat Access**: Can only join chat rooms that have "Allow Guest Users" toggle enabled
 - **Core Chat Features**: Full text messaging within allowed rooms
 - **Minimal Settings**: Only display name setting and account creation option
 - **Feature Limitations**: All other features are designed to entice account creation
 - **Quick Chat Flow**: Enables immediate participation without registration barriers
 
-**Anonymous User Settings Screen**:
-- **Display Name Setting**: Allow anonymous users to set a display name for chat identification
+**Guest User Settings Screen**:
+- **Display Name Setting**: Allow guest users to set a display name for chat identification
 - **Account Creation Option**: Prominent account creation feature to encourage conversion
 - **Legal & Support Access**: FAQs, Privacy Policy, Terms of Service for transparency and support
-- **No Sign-Out or Account Management**: Anonymous users are not "signed in" in a traditional sense
+- **No Sign-Out or Account Management**: Guest users are not "signed in" in a traditional sense
 - **Conversion Focused**: Designed to encourage account creation while maintaining core functionality
 
-**Chat Room Anonymous Settings**:
-- Room creators can toggle "Allow Anonymous Users" option during chat creation
-- This setting determines whether anonymous users can discover and join the room
+**Chat Room Guest Settings**:
+- Room creators can toggle "Allow Guest Users" option during chat creation
+- This setting determines whether guest users can discover and join the room
 - Provides flexibility for room creators to control their audience
 
 ### Account Creation Entry Points
 
 The application provides **3 specific entry points** for account creation:
 
-1. **Settings Screen Account Creation** (Primary for Anonymous Users)
-   - **Anonymous users see minimal settings with prominent account creation option**
-   - Only display name setting and account creation available to anonymous users
-   - Provides seamless upgrade path from anonymous to registered user
+1. **Settings Screen Account Creation** (Primary for Guest Users)
+   - **Guest users see minimal settings with prominent account creation option**
+   - Only display name setting and account creation available to guest users
+   - Provides seamless upgrade path from guest to registered user
    - Maintains user's chat history and display name upon account creation
 
-2. **Create Chat Tab Authentication Check** (For Anonymous Users)
-   - When anonymous users attempt to create chat rooms
+2. **Create Chat Tab Authentication Check** (For Guest Users)
+   - When guest users attempt to create chat rooms
    - Display message: "You need to have an account in order to make chats"
    - Present two options:
      - Back out (return to previous screen)
@@ -249,7 +249,7 @@ The application provides **3 specific entry points** for account creation:
    - When chat selection window is empty (no nearby rooms)
    - Show message encouraging users to create a chat and start a conversation in their area
    - **Video Ad Behavior**: Display video ad every 5 minutes if screen remains empty and user stays on screen idling
-   - **Anonymous Context**: Encourages both account creation and room discovery
+   - **Guest Context**: Encourages both account creation and room discovery
 
 ### Key UI/UX Principles
 
@@ -318,7 +318,7 @@ Join Chat / Report Room
    - Age verification required (18+)
    - Birth date validation
    - NSFW content invisible to verified minors
-   - Anonymous users cannot access NSFW content
+   - Guest users cannot access NSFW content
 
 ## Service Layer Architecture
 

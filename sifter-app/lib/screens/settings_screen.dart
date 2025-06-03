@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/auth_service.dart';
-import '../services/notification_service.dart';
-import '../services/settings_service.dart';
-import '../services/moderation_service.dart';
-import '../models/app_user.dart';
-import 'leaderboard_screen.dart';
+import 'login_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -16,293 +12,84 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _usernameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _currentPasswordController = TextEditingController();
-  final _newPasswordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  final _displayNameController = TextEditingController();
-
   bool _isLoading = false;
-  bool _isEditingProfile = false;
-  bool _isEditingPassword = false;
-  bool _isEditingDisplayName = false;
+  String _displayName = '';
 
   @override
-  void dispose() {
-    _usernameController.dispose();
-    _emailController.dispose();
-    _currentPasswordController.dispose();
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
-    _displayNameController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadDisplayName();
+  }
+
+  Future<void> _loadDisplayName() async {
+    // Load display name from shared preferences or user profile
+    // For now, we'll use a placeholder
+    setState(() {
+      _displayName = 'Guest User';
+    });
+  }
+
+  Future<void> _showDisplayNameDialog() async {
+    final controller = TextEditingController(text: _displayName);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Set Display Name'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Display Name',
+            hintText: 'Enter your display name',
+          ),
+          maxLength: 20,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() {
+        _displayName = result;
+      });
+      // TODO: Save to shared preferences or user profile
+      _showSnackBar('Display name updated');
+    }
   }
 
   Future<void> _signOut() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
       final authService = ref.read(authServiceProvider);
       await authService.signOut();
 
-      // Success - show message
-      _showSnackBar('Signed out successfully');
-      // AuthGate will automatically handle navigation to login
+      if (mounted) {
+        _showSnackBar('Signed out successfully');
+      }
     } catch (e) {
-      _showSnackBar('Failed to sign out: $e', isError: true);
-    } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _deleteAccount() async {
-    final confirmed = await _showConfirmationDialog(
-      title: 'Delete Account',
-      message:
-          'Are you sure you want to permanently delete your account? This action cannot be undone.',
-      isDestructive: true,
-    );
-
-    if (!confirmed) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      final authService = ref.read(authServiceProvider);
-      final result = await authService.deleteAccount();
-
-      if (result.isSuccess) {
-        // AuthGate will automatically handle navigation to login
-        if (result.message != null) {
-          _showSnackBar(result.message!);
-        }
-      } else {
-        _showSnackBar(result.error!, isError: true);
+        _showSnackBar('Failed to sign out: $e', isError: true);
       }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
-  }
-
-  Future<void> _updateProfile() async {
-    _showSnackBar('Update profile temporarily disabled', isError: true);
-  }
-
-  Future<void> _updatePassword() async {
-    _showSnackBar('Update password temporarily disabled', isError: true);
-  }
-
-  Future<void> _updateDisplayName() async {
-    _showSnackBar('Update display name temporarily disabled', isError: true);
-  }
-
-  Future<void> _showAccountCreationDialog() async {
-    final emailController = TextEditingController();
-    final usernameController = TextEditingController();
-    final passwordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    DateTime? selectedBirthDate;
-    bool isLoading = false;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Create Your Account'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Convert your guest account to a full account and unlock all features!',
-                  style: TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: confirmPasswordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirm Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now()
-                          .subtract(const Duration(days: 18 * 365)),
-                      firstDate: DateTime(1900),
-                      lastDate: DateTime.now(),
-                    );
-                    if (date != null) {
-                      setDialogState(() => selectedBirthDate = date);
-                    }
-                  },
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Birth Date',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.cake_outlined),
-                    ),
-                    child: Text(
-                      selectedBirthDate != null
-                          ? '${selectedBirthDate!.day}/${selectedBirthDate!.month}/${selectedBirthDate!.year}'
-                          : 'Select your birth date',
-                      style: selectedBirthDate != null
-                          ? null
-                          : TextStyle(color: Theme.of(context).hintColor),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isLoading ? null : () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: isLoading
-                  ? null
-                  : () async {
-                      // Validate inputs
-                      if (emailController.text.trim().isEmpty ||
-                          usernameController.text.trim().isEmpty ||
-                          passwordController.text.isEmpty ||
-                          confirmPasswordController.text.isEmpty ||
-                          selectedBirthDate == null) {
-                        _showSnackBar('Please fill in all fields',
-                            isError: true);
-                        return;
-                      }
-
-                      if (passwordController.text !=
-                          confirmPasswordController.text) {
-                        _showSnackBar('Passwords do not match', isError: true);
-                        return;
-                      }
-
-                      if (passwordController.text.length < 8) {
-                        _showSnackBar('Password must be at least 8 characters',
-                            isError: true);
-                        return;
-                      }
-
-                      setDialogState(() => isLoading = true);
-
-                      try {
-                        final authService = ref.read(authServiceProvider);
-                        final result =
-                            await authService.convertAnonymousToRegistered(
-                          email: emailController.text.trim(),
-                          password: passwordController.text,
-                          username: usernameController.text.trim(),
-                          birthDate: selectedBirthDate!,
-                        );
-
-                        if (result.isSuccess) {
-                          Navigator.of(context).pop();
-                          _showSnackBar(result.message ??
-                              'Account created successfully!');
-                          // Refresh the user profile
-                          ref.invalidate(currentUserProfileProvider);
-                        } else {
-                          _showSnackBar(result.error!, isError: true);
-                        }
-                      } finally {
-                        setDialogState(() => isLoading = false);
-                      }
-                    },
-              child: isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Create Account'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    // Dispose controllers
-    emailController.dispose();
-    usernameController.dispose();
-    passwordController.dispose();
-    confirmPasswordController.dispose();
-  }
-
-  Future<bool> _showConfirmationDialog({
-    required String title,
-    required String message,
-    bool isDestructive = false,
-  }) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                style: isDestructive
-                    ? TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      )
-                    : null,
-                child: Text(isDestructive ? 'Delete' : 'Confirm'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -311,882 +98,202 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _showBlockedUsersDialog(
-      BuildContext context, WidgetRef ref) async {
-    try {
-      final moderationService = ref.read(moderationServiceProvider);
-      final blockedUsers = await moderationService.getBlockedUsers();
-
-      if (!context.mounted) return;
-
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Blocked Users'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-            child: blockedUsers.isEmpty
-                ? const Center(
-                    child: Text('No blocked users'),
-                  )
-                : ListView.builder(
-                    itemCount: blockedUsers.length,
-                    itemBuilder: (context, index) {
-                      final userId = blockedUsers[index];
-                      return ListTile(
-                        leading: const Icon(Icons.block),
-                        title: Text('User ID: ${userId.substring(0, 8)}...'),
-                        trailing: TextButton(
-                          onPressed: () async {
-                            final result =
-                                await moderationService.unblockUser(userId);
-                            if (context.mounted) {
-                              if (result.isSuccess) {
-                                Navigator.of(context).pop();
-                                _showSnackBar('User unblocked successfully');
-                              } else {
-                                _showSnackBar(result.message, isError: true);
-                              }
-                            }
-                          },
-                          child: const Text('Unblock'),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      _showSnackBar('Error loading blocked users: $e', isError: true);
-    }
-  }
-
-  Future<void> _showUserReportsDialog(
-      BuildContext context, WidgetRef ref) async {
-    try {
-      final moderationService = ref.read(moderationServiceProvider);
-      final reports = await moderationService.getUserReports();
-
-      if (!context.mounted) return;
-
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('My Reports'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-            child: reports.isEmpty
-                ? const Center(
-                    child: Text('No reports submitted'),
-                  )
-                : ListView.builder(
-                    itemCount: reports.length,
-                    itemBuilder: (context, index) {
-                      final report = reports[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(report.category.displayName),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Reason: ${report.reason}'),
-                              Text('Status: ${report.status.name}'),
-                              Text(
-                                'Submitted: ${report.createdAt.day}/${report.createdAt.month}/${report.createdAt.year}',
-                              ),
-                            ],
-                          ),
-                          trailing: Icon(
-                            report.status == ReportStatus.resolved
-                                ? Icons.check_circle
-                                : report.status == ReportStatus.dismissed
-                                    ? Icons.cancel
-                                    : Icons.pending,
-                            color: report.status == ReportStatus.resolved
-                                ? Colors.green
-                                : report.status == ReportStatus.dismissed
-                                    ? Colors.red
-                                    : Colors.orange,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      _showSnackBar('Error loading reports: $e', isError: true);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final userProfileAsync = ref.watch(currentUserProfileProvider);
-    final notificationService = ref.read(notificationServiceProvider);
-    final settingsService = ref.read(settingsServiceProvider);
     final authService = ref.read(authServiceProvider);
-    final isAnonymous = authService.isAnonymousUser;
+    final isGuest = authService.isAnonymousUser;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isAnonymous ? 'Guest Settings' : 'Settings'),
-        actions: [
-          if (_isEditingDisplayName && isAnonymous)
-            TextButton(
-              onPressed: _isLoading ? null : _updateDisplayName,
-              child: const Text('Save'),
-            ),
-          if (_isEditingProfile && !isAnonymous)
-            TextButton(
-              onPressed: _isLoading ? null : _updateProfile,
-              child: const Text('Save'),
-            ),
-          if (_isEditingPassword && !isAnonymous)
-            TextButton(
-              onPressed: _isLoading ? null : _updatePassword,
-              child: const Text('Save'),
-            ),
-        ],
+        title: Text(isGuest ? 'Guest Settings' : 'Settings'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: userProfileAsync.when(
-        data: (AppUser? user) {
-          if (user == null) {
-            return const Center(
-              child: Text('Unable to load user profile'),
-            );
-          }
-
-          // Update controllers when user data loads
-          if (!_isEditingProfile &&
-              _usernameController.text.isEmpty &&
-              !isAnonymous) {
-            _usernameController.text = user.username;
-            _emailController.text = user.email;
-          }
-
-          if (!_isEditingDisplayName &&
-              _displayNameController.text.isEmpty &&
-              isAnonymous) {
-            _displayNameController.text = user.username;
-          }
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Anonymous User Minimal Settings
-                if (isAnonymous) ...[
-                  // Account Creation Card (Entry Point #1)
-                  Card(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.account_circle_outlined,
-                            size: 48,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Create Your Account',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Unlock all features:\n• Create chat rooms\n• Full messaging capabilities\n• Personalized experience\n• Score tracking & leaderboard',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer,
-                                ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: () => _showAccountCreationDialog(),
-                              icon: const Icon(Icons.person_add),
-                              label: const Text('Create Account'),
-                              style: FilledButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.primary,
-                                foregroundColor:
-                                    Theme.of(context).colorScheme.onPrimary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isGuest) ...[
+                // Guest user account creation
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.person_add),
+                    title: const Text('Create Account'),
+                    subtitle: const Text(
+                        'Unlock all features by creating an account'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const LoginScreen(initialMode: LoginMode.signUp),
+                        ),
+                      );
+                    },
                   ),
-                  const SizedBox(height: 24),
-
-                  // Display Name Setting
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Display Name',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                              if (!_isEditingDisplayName)
-                                IconButton(
-                                  onPressed: () {
-                                    setState(
-                                        () => _isEditingDisplayName = true);
-                                  },
-                                  icon: const Icon(Icons.edit_outlined),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          if (_isEditingDisplayName) ...[
-                            TextFormField(
-                              controller: _displayNameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Display Name',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.person_outline),
-                                helperText: 'How others will see you in chats',
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isEditingDisplayName = false;
-                                    _displayNameController.text = user.username;
-                                  });
-                                },
-                                child: const Text('Cancel'),
-                              ),
-                            ),
-                          ] else ...[
-                            ListTile(
-                              leading: const Icon(Icons.person_outline),
-                              title: const Text('Display Name'),
-                              subtitle: Text(user.username),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'This is how others will see you in chat rooms',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.edit),
+                    title: const Text('Display Name'),
+                    subtitle: Text(_displayName.isEmpty
+                        ? 'Set your display name for chats'
+                        : _displayName),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: _showDisplayNameDialog,
                   ),
-                  const SizedBox(height: 24),
+                ),
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 16),
 
-                  // Legal & Support Information
-                  Card(
+                // FAQs and Support section for all users
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.help_outline),
+                        title: const Text('FAQs'),
+                        subtitle: const Text('Frequently asked questions'),
+                        trailing: const Icon(Icons.arrow_forward_ios),
+                        onTap: () {
+                          // TODO: Navigate to FAQs screen
+                          _showSnackBar('FAQs screen coming soon!');
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.support_agent),
+                        title: const Text('Customer Support'),
+                        subtitle: const Text('Get help with your account'),
+                        trailing: const Icon(Icons.arrow_forward_ios),
+                        onTap: () {
+                          // TODO: Navigate to support screen
+                          _showSnackBar('Support contact coming soon!');
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Guest user info section
+                Card(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ListTile(
-                          leading: const Icon(Icons.quiz_outlined),
-                          title: const Text('FAQs'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to FAQs
-                            _showSnackBar('FAQs coming soon!');
-                          },
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(Icons.privacy_tip_outlined),
-                          title: const Text('Privacy Policy'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to privacy policy
-                            _showSnackBar('Privacy Policy coming soon!');
-                          },
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(Icons.gavel_outlined),
-                          title: const Text('Terms of Service'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to terms
-                            _showSnackBar('Terms of Service coming soon!');
-                          },
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(Icons.help_outline),
-                          title: const Text('Customer Support'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to support
-                            _showSnackBar('Customer support coming soon!');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ]
-
-                // Full Settings for Registered Users
-                else ...[
-                  // Profile Information (only for registered users)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Profile Information',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                              if (!_isEditingProfile && !_isEditingPassword)
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() => _isEditingProfile = true);
-                                  },
-                                  icon: const Icon(Icons.edit_outlined),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Username
-                          if (_isEditingProfile) ...[
-                            TextFormField(
-                              controller: _usernameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Username',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.person_outline),
-                              ),
-                            ),
-                          ] else ...[
-                            ListTile(
-                              leading: const Icon(Icons.person_outline),
-                              title: const Text('Username'),
-                              subtitle: Text(user.username),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ],
-
-                          const SizedBox(height: 16),
-
-                          // Email (read-only as per Firebase Auth requirements)
-                          ListTile(
-                            leading: const Icon(Icons.email_outlined),
-                            title: const Text('Email'),
-                            subtitle: Text(user.email),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Score (as specified in documentation)
-                          ListTile(
-                            leading: const Icon(Icons.star_outline),
-                            title: const Text('Score'),
-                            subtitle: Text('${user.points} points'),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Age (if birth date provided)
-                          if (user.age != null)
-                            ListTile(
-                              leading: const Icon(Icons.cake_outlined),
-                              title: const Text('Age'),
-                              subtitle: Text('${user.age} years old'),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-
-                          // Cancel Edit Profile
-                          if (_isEditingProfile) ...[
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isEditingProfile = false;
-                                    // Reset controllers
-                                    _usernameController.text = user.username;
-                                    _emailController.text = user.email;
-                                  });
-                                },
-                                child: const Text('Cancel'),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Password Management
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Password',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                              if (!_isEditingPassword && !_isEditingProfile)
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() => _isEditingPassword = true);
-                                  },
-                                  icon: const Icon(Icons.edit_outlined),
-                                ),
-                            ],
-                          ),
-                          if (_isEditingPassword) ...[
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _currentPasswordController,
-                              decoration: const InputDecoration(
-                                labelText: 'Current Password',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.lock_outline),
-                              ),
-                              obscureText: true,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _newPasswordController,
-                              decoration: const InputDecoration(
-                                labelText: 'New Password',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.lock_outline),
-                              ),
-                              obscureText: true,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _confirmPasswordController,
-                              decoration: const InputDecoration(
-                                labelText: 'Confirm New Password',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.lock_outline),
-                              ),
-                              obscureText: true,
-                            ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isEditingPassword = false;
-                                    // Clear password fields
-                                    _currentPasswordController.clear();
-                                    _newPasswordController.clear();
-                                    _confirmPasswordController.clear();
-                                  });
-                                },
-                                child: const Text('Cancel'),
-                              ),
-                            ),
-                          ] else ...[
-                            const SizedBox(height: 8),
-                            const ListTile(
-                              leading: Icon(Icons.lock_outline),
-                              title: Text('Password'),
-                              subtitle: Text('••••••••'),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // App Preferences
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'App Preferences',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          const SizedBox(height: 16),
-                          SwitchListTile(
-                            title: const Text('Dark Mode'),
-                            subtitle: const Text('Use dark theme'),
-                            value: settingsService.isDarkMode,
-                            onChanged: (value) async {
-                              await settingsService.setDarkMode(value);
-                              setState(() {}); // Trigger rebuild to update UI
-                            },
-                            secondary: const Icon(Icons.dark_mode_outlined),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          SwitchListTile(
-                            title: const Text('Video Ads'),
-                            subtitle: const Text('Show video advertisements'),
-                            value: settingsService.videoAdsEnabled,
-                            onChanged: (value) async {
-                              await settingsService.setVideoAdsEnabled(value);
-                              setState(() {});
-                            },
-                            secondary: const Icon(Icons.video_library_outlined),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Notification Settings
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Notification Settings',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          const SizedBox(height: 16),
-                          SwitchListTile(
-                            title: const Text('Message Notifications'),
-                            subtitle:
-                                const Text('Get notified of new messages'),
-                            value: notificationService
-                                .isMessageNotificationsEnabled,
-                            onChanged: (value) async {
-                              await notificationService
-                                  .saveNotificationPreferences(
-                                messageNotifications: value,
-                              );
-                              await settingsService
-                                  .setNotificationsEnabled(value);
-                              setState(() {});
-                            },
-                            secondary: const Icon(Icons.message_outlined),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          SwitchListTile(
-                            title: const Text('Sound'),
-                            subtitle:
-                                const Text('Play sound for notifications'),
-                            value: notificationService.isSoundEnabled,
-                            onChanged: (value) async {
-                              await notificationService
-                                  .saveNotificationPreferences(
-                                sound: value,
-                              );
-                              await settingsService.setSoundEnabled(value);
-                              setState(() {});
-                            },
-                            secondary: const Icon(Icons.volume_up_outlined),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          SwitchListTile(
-                            title: const Text('Vibration'),
-                            subtitle: const Text('Vibrate for notifications'),
-                            value: notificationService.isVibrationEnabled,
-                            onChanged: (value) async {
-                              await notificationService
-                                  .saveNotificationPreferences(
-                                vibration: value,
-                              );
-                              await settingsService.setVibrationEnabled(value);
-                              setState(() {});
-                            },
-                            secondary: const Icon(Icons.vibration_outlined),
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Leaderboard (as specified in documentation)
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.leaderboard_outlined),
-                      title: const Text('Leaderboard'),
-                      subtitle: const Text('See top users'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => const LeaderboardScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // ✅ Moderation Section (for registered users)
-                  if (!isAnonymous) ...[
-                    Text(
-                      'Safety & Moderation',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.block),
-                            title: const Text('Blocked Users'),
-                            subtitle:
-                                const Text('Manage users you have blocked'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => _showBlockedUsersDialog(context, ref),
-                          ),
-                          const Divider(height: 1),
-                          ListTile(
-                            leading: const Icon(Icons.report),
-                            title: const Text('My Reports'),
-                            subtitle: const Text('View your submitted reports'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => _showUserReportsDialog(context, ref),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Legal & Support Section
-                  Card(
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.help_outline),
-                          title: const Text('Customer Support'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to support
-                            _showSnackBar('Customer support coming soon!');
-                          },
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(Icons.quiz_outlined),
-                          title: const Text('FAQs'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to FAQs
-                            _showSnackBar('FAQs coming soon!');
-                          },
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(Icons.privacy_tip_outlined),
-                          title: const Text('Privacy Policy'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to privacy policy
-                            _showSnackBar('Privacy Policy coming soon!');
-                          },
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(Icons.gavel_outlined),
-                          title: const Text('Terms of Service'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            // TODO: Navigate to terms
-                            _showSnackBar('Terms of Service coming soon!');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Account Actions (Sign out & Account deletion as specified)
-                  Card(
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: Icon(
-                            Icons.logout,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          title: Text(
-                            'Sign Out',
-                            style: TextStyle(
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
                               color: Theme.of(context).colorScheme.primary,
                             ),
-                          ),
-                          onTap: _isLoading ? null : _signOut,
-                        ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: Icon(
-                            Icons.delete_forever,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          title: Text(
-                            'Delete Account',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                            const SizedBox(width: 8),
+                            Text(
+                              'Guest Mode',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
                             ),
-                          ),
-                          onTap: _isLoading ? null : _deleteAccount,
+                          ],
                         ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'You\'re using Sifter as a guest. Create an account to:',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text('• Create your own chat rooms'),
+                        const Text('• Access all chat rooms'),
+                        const Text('• Keep your chat history'),
+                        const Text('• Earn points and see leaderboards'),
+                        const Text('• Customize your profile'),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // App Info
-                  Center(
+                ),
+              ] else ...[
+                // Registered user settings
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Sifter Chat',
+                          'Profile Information',
                           style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
                                   ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Version 1.0.0',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
+                        const SizedBox(height: 16),
+                        const ListTile(
+                          leading: Icon(Icons.person_outline),
+                          title: Text('Username'),
+                          subtitle: Text('Registered User'),
+                          contentPadding: EdgeInsets.zero,
                         ),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 32),
-                ],
+                ),
+                const SizedBox(height: 16),
+                // Sign out button
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.logout,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    onTap: _isLoading ? null : _signOut,
+                  ),
+                ),
               ],
-            ),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48),
-              const SizedBox(height: 16),
-              Text('Error loading profile: $error'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  ref.invalidate(currentUserProfileProvider);
-                },
-                child: const Text('Retry'),
+
+              const SizedBox(height: 32),
+
+              // App info
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'Sifter Chat',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Version 1.0.0',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

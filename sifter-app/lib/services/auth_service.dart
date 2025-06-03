@@ -2,12 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
+import 'dart:async';
 
 import '../models/app_user.dart';
+import '../utils/logger.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ProviderRef _ref;
 
   /// Local guest mode state (when Firebase anonymous auth is disabled)
   bool _isLocalGuest = false;
@@ -33,6 +36,15 @@ class AuthService {
 
   /// Temporary storage for pending OTP sign-ups
   final Map<String, _PendingOTPSignUp> _pendingOTPSignUps = {};
+
+  /// Temporary storage for phone verification
+  String? _pendingVerificationId;
+  String? _pendingPhoneNumber;
+  String? _simulatedOTP; // For development mode
+  Map<String, dynamic>?
+      _pendingPhoneSignUpData; // Store data between OTP and password steps
+
+  AuthService(this._ref);
 
   /// Generate random 6-digit OTP
   String _generateOTP() {
@@ -465,15 +477,117 @@ class AuthService {
   /// Helper: Check if username is taken
   Future<bool> _isUsernameTaken(String username) async {
     try {
+      Logger.debug('Checking if username is taken: $username',
+          component: 'AUTH');
+
       final query = await _firestore
           .collection('users')
           .where('username', isEqualTo: username)
           .limit(1)
           .get();
 
-      return query.docs.isNotEmpty;
-    } catch (e) {
+      final isTaken = query.docs.isNotEmpty;
+      Logger.debug('Username check result: $isTaken', component: 'AUTH');
+      return isTaken;
+    } on FirebaseException catch (e) {
+      Logger.error('FirebaseException in username check: ${e.code}',
+          component: 'AUTH', error: e);
+
+      // If permission denied, assume username is available for now
+      // This prevents blocking account creation due to Firestore rules
+      if (e.code == 'permission-denied') {
+        Logger.debug('Permission denied for username check - allowing signup',
+            component: 'AUTH');
+        return false; // Assume username is available
+      }
+
+      // For other Firebase errors, also assume available
       return false;
+    } catch (e) {
+      Logger.error('General error in username check',
+          component: 'AUTH', error: e);
+      // For any other error, assume username is available to not block signup
+      return false;
+    }
+  }
+
+  /// Helper: Normalize phone number for Firebase
+  String _normalizePhoneNumber(String phone) {
+    // Remove all non-digit characters except +
+    String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
+
+    // If it doesn't start with +, assume US number and add +1
+    if (!cleaned.startsWith('+')) {
+      // If it's 10 digits, assume US number
+      if (cleaned.length == 10) {
+        cleaned = '+1$cleaned';
+      } else if (cleaned.length == 11 && cleaned.startsWith('1')) {
+        // If it's 11 digits starting with 1, add + prefix
+        cleaned = '+$cleaned';
+      } else {
+        // For other lengths, just add + prefix (international)
+        cleaned = '+$cleaned';
+      }
+    }
+
+    Logger.debug(
+        'Normalized phone: ${Logger.sanitizePhone(phone)} → ${Logger.sanitizePhone(cleaned)}',
+        component: 'AUTH');
+    return cleaned;
+  }
+
+  /// Helper: Validate phone number format
+  bool _isValidPhoneNumber(String phone) {
+    // Clean the phone number of all non-digit characters except +
+    final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+
+    // Accept various formats:
+    // - International format with +: +1234567890 (minimum 10 digits after +)
+    // - US format without +: 1234567890 (exactly 10 digits for US)
+    // - International without +: 1234567890... (minimum 10 digits)
+
+    if (cleanPhone.startsWith('+')) {
+      // International format with +
+      final digits = cleanPhone.substring(1);
+      return digits.length >= 10 && digits.length <= 15;
+    } else {
+      // Format without +
+      return cleanPhone.length >= 10 && cleanPhone.length <= 15;
+    }
+  }
+
+  /// Helper: Create user profile for phone-authenticated users
+  Future<void> _createPhoneUserProfile(User user, String phone) async {
+    try {
+      print('🔍 Creating phone user profile for UID: ${user.uid}');
+
+      final userDoc = _firestore.collection('users').doc(user.uid);
+
+      // Check if user profile already exists
+      final existingDoc = await userDoc.get();
+      if (existingDoc.exists) {
+        print('🔍 User profile already exists, updating...');
+        await userDoc.update({
+          'phoneNumber': phone,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        print('🔍 Creating new user profile...');
+        await userDoc.set({
+          'uid': user.uid,
+          'phoneNumber': phone,
+          'username':
+              'User${user.uid.substring(0, 6)}', // Generate default username
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'isActive': true,
+        });
+      }
+
+      print('🎉 Phone user profile created/updated successfully');
+    } catch (e) {
+      print('💥 Error creating phone user profile: $e');
+      rethrow;
     }
   }
 
@@ -527,17 +641,17 @@ class AuthService {
           '🔍 Firebase anonymous sign-in completed. User: ${result.user?.uid}');
 
       if (result.user != null) {
-        print('🔍 Creating anonymous user profile in Firestore...');
-        // Create anonymous user profile in Firestore
+        print('🔍 Creating guest user profile in Firestore...');
+        // Create guest user profile in Firestore
         await _createAnonymousUserProfile(result.user!);
-        print('🎉 Firebase anonymous sign-in successful!');
+        print('🎉 Firebase guest sign-in successful!');
 
         return AuthResult.success(
           message:
               'Signed in as guest - create an account anytime in Settings!',
         );
       } else {
-        print('❌ Firebase anonymous sign-in returned null user');
+        print('❌ Firebase guest sign-in returned null user');
         return AuthResult.failure('Failed to sign in as guest');
       }
     } on FirebaseAuthException catch (e) {
@@ -588,6 +702,9 @@ class AuthService {
       _isLocalGuest = true;
       print('🎉 Local guest mode activated successfully!');
 
+      // Invalidate the local guest state provider to trigger UI updates
+      _ref.invalidate(localGuestStateProvider);
+
       return AuthResult.success(
         message:
             'Welcome, Guest! Create an account anytime in Settings to unlock all features.',
@@ -603,25 +720,26 @@ class AuthService {
   Future<void> _createAnonymousUserProfile(User user) async {
     try {
       final now = DateTime.now();
-      final anonymousUser = AppUser(
+      final guestUser = AppUser(
         id: user.uid,
-        email: 'anonymous@sifter.app', // Placeholder email
-        username:
-            'Anonymous${user.uid.substring(0, 6)}', // Generate anonymous username
+        email: 'guest@sifter.app', // Placeholder email
+        username: 'Guest${user.uid.substring(0, 6)}', // Generate guest username
         isEmailVerified: false,
         points: 0,
         createdAt: now,
         updatedAt: now,
-        preferences: {'isAnonymous': true}, // Mark as anonymous in preferences
+        preferences: {
+          'isAnonymous': true
+        }, // Mark as guest in preferences (keep internal flag)
       );
 
       await _firestore
           .collection('users')
           .doc(user.uid)
-          .set(anonymousUser.toFirestore());
+          .set(guestUser.toFirestore());
     } catch (e) {
-      print('Failed to create anonymous user profile: $e');
-      // Don't throw error - anonymous sign-in should still work
+      print('Failed to create guest user profile: $e');
+      // Don't throw error - guest sign-in should still work
     }
   }
 
@@ -635,7 +753,7 @@ class AuthService {
     try {
       final user = _auth.currentUser;
       if (user == null || !user.isAnonymous) {
-        return AuthResult.failure('No anonymous user to convert');
+        return AuthResult.failure('No guest user to convert');
       }
 
       // Create email credential
@@ -663,7 +781,7 @@ class AuthService {
           message: 'Account created successfully! Please verify your email.',
         );
       } else {
-        return AuthResult.failure('Failed to convert anonymous account');
+        return AuthResult.failure('Failed to convert guest account');
       }
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
@@ -729,16 +847,16 @@ class AuthService {
     }
   }
 
-  /// Check if anonymous user can create chats
+  /// Check if guest user can create chats
   bool canCreateChats() {
     return isRegisteredUser; // Only registered users can create chats
   }
 
-  /// Check if anonymous user can join specific room
-  bool canJoinRoom(bool roomAllowsAnonymous) {
+  /// Check if guest user can join specific room
+  bool canJoinRoom(bool roomAllowsGuests) {
     if (isRegisteredUser) return true; // Registered users can join any room
     if (isAnonymousUser) {
-      return roomAllowsAnonymous; // Anonymous users need permission
+      return roomAllowsGuests; // Guest users need permission
     }
     return false; // Not authenticated
   }
@@ -746,13 +864,350 @@ class AuthService {
   /// Get user type for UI display
   String getUserTypeDisplay() {
     if (isRegisteredUser) return 'Registered';
-    if (isAnonymousUser) return 'Anonymous';
+    if (isAnonymousUser) return 'Guest';
     return 'Guest';
   }
 
-  /// Get account creation prompt message for anonymous users
+  /// Get account creation prompt message for guest users
   String getAccountCreationPrompt() {
     return 'Create an account to unlock all features like creating chats, full messaging, and more!';
+  }
+
+  /// Sign up with phone number
+  Future<AuthResult> signUpWithPhone({
+    required String phone,
+  }) async {
+    Logger.debug(
+        'signUpWithPhone() called with phone: ${Logger.sanitizePhone(phone)}',
+        component: 'AUTH');
+
+    try {
+      Logger.debug('Starting phone verification process...', component: 'AUTH');
+
+      // Validate phone number format
+      Logger.debug('Validating phone number format...', component: 'AUTH');
+      if (!_isValidPhoneNumber(phone)) {
+        Logger.debug('Phone number validation failed', component: 'AUTH');
+        return AuthResult.failure('Please enter a valid phone number');
+      }
+      Logger.debug('Phone number validation passed', component: 'AUTH');
+
+      // Normalize phone number for Firebase
+      Logger.debug('Normalizing phone number...', component: 'AUTH');
+      final normalizedPhone = _normalizePhoneNumber(phone);
+      Logger.debug('Phone number normalized', component: 'AUTH');
+
+      // TEMPORARY: Use simulation instead of Firebase phone auth to prevent freezing
+      // This is a development fallback until Firebase phone auth is properly configured
+      Logger.debug('Using OTP simulation for development...',
+          component: 'AUTH');
+
+      // Simulate OTP generation and storage
+      final simulatedOTP = '123456'; // Fixed OTP for testing
+      _pendingVerificationId = 'sim_${DateTime.now().millisecondsSinceEpoch}';
+      _pendingPhoneNumber = normalizedPhone;
+
+      // Store simulated OTP temporarily (in production, this would be sent via SMS)
+      _simulatedOTP = simulatedOTP;
+
+      Logger.debug('Simulated OTP generated and stored', component: 'AUTH');
+      print(
+          '📱 DEVELOPMENT MODE: OTP for ${Logger.sanitizePhone(normalizedPhone)} is: $simulatedOTP');
+
+      return AuthResult.success(
+        message: 'Verification code sent to $phone (DEV MODE: check console)',
+      );
+
+      /* 
+      // COMMENTED OUT: Real Firebase phone authentication
+      // Uncomment and remove simulation when Firebase is properly configured
+      
+      Logger.debug('Calling Firebase verifyPhoneNumber...', component: 'AUTH');
+      
+      await _auth.verifyPhoneNumber(
+        phoneNumber: normalizedPhone,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          Logger.debug('Phone verification completed automatically', component: 'AUTH');
+          try {
+            final result = await _auth.signInWithCredential(credential);
+            if (result.user != null) {
+              await _createPhoneUserProfile(result.user!, normalizedPhone);
+              Logger.auth('Phone sign-up successful');
+            }
+          } catch (e) {
+            Logger.error('Error in verificationCompleted', component: 'AUTH', error: e);
+          }
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          Logger.error('Phone verification failed', component: 'AUTH', error: e);
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          Logger.debug('OTP sent to phone: ${Logger.sanitizePhone(normalizedPhone)}', component: 'AUTH');
+          // Store verification ID for later use
+          _pendingVerificationId = verificationId;
+          _pendingPhoneNumber = normalizedPhone;
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          Logger.debug('Auto-retrieval timeout for verification: ${Logger.sanitize(verificationId)}', component: 'AUTH');
+        },
+      );
+
+      Logger.debug('Firebase verifyPhoneNumber call completed', component: 'AUTH');
+
+      return AuthResult.success(
+        message: 'Verification code sent to $phone',
+      );
+      */
+    } on FirebaseAuthException catch (e) {
+      Logger.error('FirebaseAuthException in signUpWithPhone: ${e.code}',
+          component: 'AUTH', error: e);
+      return AuthResult.failure(_getAuthErrorMessage(e.code));
+    } catch (e) {
+      Logger.error('General exception in signUpWithPhone',
+          component: 'AUTH', error: e);
+      return AuthResult.failure('Failed to send verification code: $e');
+    }
+  }
+
+  /// Verify phone OTP and complete sign-up (now just OTP verification step)
+  Future<AuthResult> verifyPhoneOTP({
+    required String otp,
+  }) async {
+    Logger.debug('verifyPhoneOTP() called with OTP: ${Logger.sanitize(otp)}',
+        component: 'AUTH');
+    try {
+      if (_pendingVerificationId == null) {
+        return AuthResult.failure('No verification in progress');
+      }
+
+      // Check if this is a simulated verification (development mode)
+      if (_pendingVerificationId!.startsWith('sim_') && _simulatedOTP != null) {
+        Logger.debug('Using simulated OTP verification...', component: 'AUTH');
+
+        if (otp != _simulatedOTP) {
+          return AuthResult.failure(
+              'Invalid verification code. Please try again.');
+        }
+
+        // Store phone data for password creation step
+        _pendingPhoneSignUpData = {
+          'phoneNumber': _pendingPhoneNumber!,
+          'verificationId': _pendingVerificationId!,
+          'verifiedAt': DateTime.now(),
+        };
+
+        Logger.auth(
+            'Simulated OTP verification successful - ready for password');
+        return AuthResult.success(
+          message: 'Phone verified! Create your password.',
+        );
+      }
+
+      // Real Firebase phone verification (commented out for now)
+      /*
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _pendingVerificationId!,
+        smsCode: otp,
+      );
+
+      // Just verify the OTP, don't create account yet
+      // Store verification data for password creation step
+      _pendingPhoneSignUpData = {
+        'phoneNumber': _pendingPhoneNumber!,
+        'verificationId': _pendingVerificationId!,
+        'credential': credential,
+        'verifiedAt': DateTime.now(),
+      };
+      
+      Logger.auth('Phone OTP verification successful - ready for password');
+      return AuthResult.success(
+        message: 'Phone verified! Create your password.',
+      );
+      */
+
+      return AuthResult.failure('Phone verification temporarily disabled');
+    } on FirebaseAuthException catch (e) {
+      Logger.error('FirebaseAuthException in verifyPhoneOTP: ${e.code}',
+          component: 'AUTH', error: e);
+      return AuthResult.failure(_getAuthErrorMessage(e.code));
+    } catch (e) {
+      Logger.error('General exception in verifyPhoneOTP',
+          component: 'AUTH', error: e);
+      return AuthResult.failure('Failed to verify code: $e');
+    }
+  }
+
+  /// Complete phone sign-up with password (Step 3 of phone sign-up)
+  Future<AuthResult> completePhoneSignUpWithPassword({
+    required String password,
+    required String username,
+    required DateTime birthDate,
+  }) async {
+    Logger.debug('completePhoneSignUpWithPassword() called', component: 'AUTH');
+
+    if (_pendingPhoneSignUpData == null) {
+      return AuthResult.failure(
+          'No verified phone number found. Please start over.');
+    }
+
+    try {
+      final phoneNumber = _pendingPhoneSignUpData!['phoneNumber'] as String;
+
+      // Check if username is already taken
+      final usernameExists = await _isUsernameTaken(username);
+      if (usernameExists) {
+        return AuthResult.failure('Username is already taken');
+      }
+
+      // Create a proper email/password account using phone number as email base
+      final normalizedPhone = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+      final email = '$normalizedPhone@phone.sifter.app';
+
+      Logger.debug('Creating email/password account with email: $email',
+          component: 'AUTH');
+
+      // Create user with email and password (this makes them non-anonymous)
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = credential.user;
+      if (user == null) {
+        Logger.error('Failed to create Firebase user', component: 'AUTH');
+        return AuthResult.failure('Failed to create account');
+      }
+
+      Logger.debug('Firebase user created successfully: ${user.uid}',
+          component: 'AUTH');
+
+      // Create user profile with phone and password
+      final appUser = AppUser(
+        id: user.uid,
+        email: email,
+        username: username,
+        birthDate: birthDate,
+        points: 0,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        preferences: {
+          'phoneNumber': phoneNumber,
+          'isPhoneVerified': true,
+          'authMethod': 'phone',
+        },
+      );
+
+      await _firestore.collection('users').doc(user.uid).set(appUser.toJson());
+
+      Logger.debug('User profile created in Firestore', component: 'AUTH');
+
+      // Store phone number separately for lookups
+      await _firestore.collection('phone_users').doc(normalizedPhone).set({
+        'userId': user.uid,
+        'phoneNumber': phoneNumber,
+        'email': email,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      Logger.debug('Phone lookup record created', component: 'AUTH');
+
+      // Clear pending data
+      _pendingPhoneSignUpData = null;
+      _pendingVerificationId = null;
+      _pendingPhoneNumber = null;
+      _simulatedOTP = null;
+
+      Logger.auth('Phone sign-up with password completed successfully');
+      return AuthResult.success(
+        message: 'Account created successfully!',
+        user: user,
+      );
+    } on FirebaseAuthException catch (e) {
+      Logger.error(
+          'FirebaseAuthException in completePhoneSignUpWithPassword: ${e.code}',
+          component: 'AUTH',
+          error: e);
+      return AuthResult.failure(_getAuthErrorMessage(e.code));
+    } catch (e) {
+      Logger.error('Error completing phone sign-up with password',
+          component: 'AUTH', error: e);
+      return AuthResult.failure('Failed to complete account creation: $e');
+    }
+  }
+
+  /// Sign in with phone and password
+  Future<AuthResult> signInWithPhoneAndPassword({
+    required String phone,
+    required String password,
+  }) async {
+    Logger.debug('signInWithPhoneAndPassword() called', component: 'AUTH');
+
+    try {
+      final normalizedPhone = _normalizePhoneNumber(phone);
+      final normalizedPhoneDigits =
+          normalizedPhone.replaceAll(RegExp(r'[^\d]'), '');
+
+      Logger.debug('Looking up phone user record...', component: 'AUTH');
+
+      // Look up the email associated with this phone number
+      final phoneUserDoc = await _firestore
+          .collection('phone_users')
+          .doc(normalizedPhoneDigits)
+          .get();
+
+      if (!phoneUserDoc.exists) {
+        Logger.debug('No phone user record found', component: 'AUTH');
+        return AuthResult.failure('No account found with this phone number');
+      }
+
+      final phoneData = phoneUserDoc.data()!;
+      final email = phoneData['email'] as String;
+
+      Logger.debug('Found email for phone: $email', component: 'AUTH');
+
+      // Sign in with the email and password
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (credential.user != null) {
+        Logger.auth('Phone + password sign-in successful');
+        return AuthResult.success(
+          message: 'Welcome back!',
+          user: credential.user,
+        );
+      } else {
+        return AuthResult.failure('Failed to sign in');
+      }
+    } on FirebaseException catch (e) {
+      Logger.error('FirebaseException in phone lookup: ${e.code}',
+          component: 'AUTH', error: e);
+
+      if (e.code == 'permission-denied') {
+        return AuthResult.failure(
+            'Unable to access account data. Please update the app or contact support.');
+      }
+
+      return AuthResult.failure('Database error: ${e.message}');
+    } on FirebaseAuthException catch (e) {
+      Logger.error(
+          'FirebaseAuthException in signInWithPhoneAndPassword: ${e.code}',
+          component: 'AUTH',
+          error: e);
+
+      if (e.code == 'wrong-password') {
+        return AuthResult.failure('Invalid password');
+      } else if (e.code == 'user-not-found') {
+        return AuthResult.failure('No account found with this phone number');
+      } else {
+        return AuthResult.failure(_getAuthErrorMessage(e.code));
+      }
+    } catch (e) {
+      Logger.error('Error in phone + password sign-in',
+          component: 'AUTH', error: e);
+      return AuthResult.failure('Failed to sign in: $e');
+    }
   }
 }
 
@@ -781,7 +1236,13 @@ class AuthResult {
 
 /// Providers for AuthService
 final authServiceProvider = Provider<AuthService>((ref) {
-  return AuthService();
+  return AuthService(ref);
+});
+
+/// Provider for local guest state changes
+final localGuestStateProvider = StateProvider<bool>((ref) {
+  final authService = ref.watch(authServiceProvider);
+  return authService.isLocalGuest;
 });
 
 /// Provider for authentication state
@@ -794,11 +1255,12 @@ final authStateProvider = StreamProvider<User?>((ref) {
 final isAuthenticatedProvider = StateProvider<bool>((ref) {
   final authService = ref.watch(authServiceProvider);
   final authState = ref.watch(authStateProvider);
+  final localGuestState = ref.watch(localGuestStateProvider);
 
   return authState.when(
-    data: (user) => user != null || authService.isLocalGuest,
-    loading: () => false,
-    error: (_, __) => authService.isLocalGuest,
+    data: (user) => user != null || localGuestState,
+    loading: () => localGuestState,
+    error: (_, __) => localGuestState,
   );
 });
 

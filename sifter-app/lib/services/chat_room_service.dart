@@ -1,16 +1,12 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_firebase_chat_core/flutter_firebase_chat_core.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat_room.dart';
-import '../models/app_user.dart';
 import 'location_service.dart';
 import 'password_service.dart';
 import 'auth_service.dart';
-import 'leaderboard_service.dart';
 
 class ChatRoomService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
